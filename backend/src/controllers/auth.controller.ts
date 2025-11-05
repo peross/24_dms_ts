@@ -45,7 +45,7 @@ export class AuthController {
         password,
         firstName,
         lastName,
-        roleNames: roleNames || ['user'],
+        roleNames: roleNames || ['member'], // Default to 'member' role
       }, deviceInfo);
 
       // Set refresh token in httpOnly cookie
@@ -201,6 +201,21 @@ export class AuthController {
         return;
       }
 
+      // getUserProfile already returns a plain object with roles included
+      // Ensure roles are present (getUserProfile should have already added them)
+      if (!(user as any).roles || !Array.isArray((user as any).roles)) {
+        // Fallback: fetch roles if somehow missing
+        const roles = await UserService.getUserRoles(req.user.userId);
+        (user as any).roles = roles;
+      }
+
+      // Debug: Log roles to verify they're being included
+      console.log('User profile response:', {
+        userId: (user as any).userId,
+        email: (user as any).email,
+        roles: (user as any).roles,
+      });
+
       res.status(200).json({ user });
     } catch (error: any) {
       res.status(500).json({ error: error.message || 'Failed to get profile' });
@@ -263,7 +278,9 @@ export class AuthController {
       res.status(200).json({ message: 'Password updated successfully' });
     } catch (error: any) {
       if (error.message === 'Current password is incorrect') {
-        res.status(401).json({ error: error.message });
+        // Return 400 (Bad Request) instead of 401 (Unauthorized) for incorrect password
+        // 401 triggers token refresh in the frontend interceptor, causing infinite loops
+        res.status(400).json({ error: error.message });
       } else {
         res.status(400).json({ error: error.message || 'Failed to update password' });
       }

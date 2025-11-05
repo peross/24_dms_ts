@@ -5,6 +5,9 @@ import dotenv from 'dotenv';
 import { connectDatabase, sequelize } from './config/database';
 import { setupAssociations } from './models';
 import authRoutes from './routes/auth.route';
+import folderRoutes from './routes/folder.route';
+import fileRoutes from './routes/file.route';
+import adminRoutes from './routes/admin.route';
 
 dotenv.config();
 
@@ -30,8 +33,8 @@ app.use(cors({
   credentials: true, // Allow cookies
 }));
 app.use(cookieParser());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Health check endpoint
 app.get('/health', (_req: Request, res: Response) => {
@@ -40,6 +43,9 @@ app.get('/health', (_req: Request, res: Response) => {
 
 // API routes
 app.use('/api/auth', authRoutes);
+app.use('/api/folders', folderRoutes);
+app.use('/api/files', fileRoutes);
+app.use('/api/admin', adminRoutes);
 
 // API info endpoint
 app.get('/api', (_req: Request, res: Response) => {
@@ -140,6 +146,37 @@ const startServer = async () => {
         } else {
           console.warn('⚠️  Migration warning:', error.message);
         }
+      }
+
+      // Add file versioning support
+      try {
+        const { addCurrentVersionToFiles } = await import('./migrations/add-current-version-to-files');
+        await addCurrentVersionToFiles();
+      } catch (error: any) {
+        if (error.message?.includes("doesn't exist") || error.message?.includes("Unknown table")) {
+          console.log('⏭️  Files table doesn\'t exist yet, columns will be added on next sync');
+        } else {
+          console.warn('⚠️  Migration warning:', error.message);
+        }
+      }
+
+      try {
+        const { addFileVersionsTable } = await import('./migrations/add-file-versions');
+        await addFileVersionsTable();
+      } catch (error: any) {
+        if (error.message?.includes("doesn't exist") || error.message?.includes("Unknown table")) {
+          console.log('⏭️  Files table doesn\'t exist yet, file_versions table will be created on next sync');
+        } else {
+          console.warn('⚠️  Migration warning:', error.message);
+        }
+      }
+
+      // Fix UTF-8 encoding for tables
+      try {
+        const { fixUtf8Encoding } = await import('./migrations/fix-utf8-encoding');
+        await fixUtf8Encoding();
+      } catch (error: any) {
+        console.warn('⚠️  UTF-8 encoding migration warning:', error.message);
       }
 
       // Clean up expired refresh tokens on startup

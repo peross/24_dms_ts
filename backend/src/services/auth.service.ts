@@ -66,7 +66,7 @@ export class AuthService {
   }
 
   async login(data: LoginDto, deviceInfo?: DeviceInfo, twoFactorToken?: string): Promise<AuthResponse> {
-    // Find user by email or username
+    // Find user by email or username (without roles for password verification)
     const user = await UserService.findByEmailOrUsername(data.emailOrUsername);
     if (!user) {
       throw new Error('Invalid email/username or password');
@@ -93,7 +93,7 @@ export class AuthService {
       }
     }
 
-    // Get user roles
+    // Get user roles from user_roles table
     const roles = await UserService.getUserRoles(user.userId);
 
     // Generate tokens

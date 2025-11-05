@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
 import { useProfile } from '../hooks/useProfile';
 import { Button } from '@/components/ui/button';
@@ -37,16 +38,18 @@ interface ProfileModalProps {
 }
 
 export function ProfileModal({ open, onOpenChange }: ProfileModalProps) {
+  const { t } = useTranslation();
+  
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-hidden flex flex-col p-0">
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <DialogTitle className="flex items-center gap-2">
             <User className="w-5 h-5" />
-            User Profile
+            {t('auth.profile.title')}
           </DialogTitle>
           <DialogDescription>
-            Manage your profile information and security settings.
+            {t('auth.profile.description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -57,14 +60,14 @@ export function ProfileModal({ open, onOpenChange }: ProfileModalProps) {
               className="w-full justify-start data-[state=active]:bg-background"
             >
               <User className="w-4 h-4 mr-2" />
-              Profile
+              {t('auth.profile.profileTab')}
             </TabsTrigger>
             <TabsTrigger 
               value="security" 
               className="w-full justify-start data-[state=active]:bg-background"
             >
               <Shield className="w-4 h-4 mr-2" />
-              Security
+              {t('auth.profile.securityTab')}
             </TabsTrigger>
           </TabsList>
 
@@ -84,6 +87,7 @@ export function ProfileModal({ open, onOpenChange }: ProfileModalProps) {
 }
 
 function ProfileTab() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { updateProfile, updateProfileLoading } = useProfile();
 
@@ -115,19 +119,19 @@ function ProfileTab() {
         firstName: firstName !== user?.firstName ? firstName : undefined,
         lastName: lastName !== user?.lastName ? lastName : undefined,
       });
-      setProfileSuccess('Profile updated successfully!');
+      setProfileSuccess(t('auth.profile.profileUpdated'));
       setTimeout(() => setProfileSuccess(''), 3000);
     } catch (err: any) {
-      setProfileError(err.response?.data?.error || err.message || 'Failed to update profile.');
+      setProfileError(err.response?.data?.error || err.message || t('auth.profile.updateFailed'));
     }
   };
 
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold mb-2">Profile Information</h3>
+        <h3 className="text-lg font-semibold mb-2">{t('auth.profile.profileInformation')}</h3>
         <p className="text-sm text-muted-foreground">
-          Update your personal information and contact details.
+          {t('auth.profile.profileDescription')}
         </p>
       </div>
 
@@ -145,14 +149,14 @@ function ProfileTab() {
 
         <div className="space-y-2">
           <label htmlFor="modal-email" className="text-sm font-medium">
-            Email address
+            {t('auth.profile.email')}
           </label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               id="modal-email"
               type="email"
-              placeholder="name@example.com"
+              placeholder={t('auth.profile.emailPlaceholder')}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="pl-10"
@@ -164,15 +168,15 @@ function ProfileTab() {
 
         <div className="space-y-2">
           <label htmlFor="modal-username" className="text-sm font-medium">
-            Username
-            <span className="text-xs text-muted-foreground ml-2">(optional)</span>
+            {t('auth.profile.username')}
+            <span className="text-xs text-muted-foreground ml-2">{t('auth.profile.usernameOptional')}</span>
           </label>
           <div className="relative">
             <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               id="modal-username"
               type="text"
-              placeholder="username"
+              placeholder={t('auth.profile.usernamePlaceholder')}
               value={username}
               onChange={(e) => {
                 const value = e.target.value.replace(/[^a-zA-Z0-9_]/g, '');
@@ -185,21 +189,21 @@ function ProfileTab() {
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            Letters, numbers, and underscores only. 3-30 characters.
+            {t('auth.profile.usernameHint')}
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <label htmlFor="modal-firstName" className="text-sm font-medium">
-              First Name
+              {t('auth.profile.firstName')}
             </label>
             <div className="relative">
               <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 id="modal-firstName"
                 type="text"
-                placeholder="Your first name"
+                placeholder={t('auth.profile.firstNamePlaceholder')}
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
                 className="pl-10"
@@ -210,14 +214,14 @@ function ProfileTab() {
 
           <div className="space-y-2">
             <label htmlFor="modal-lastName" className="text-sm font-medium">
-              Last Name
+              {t('auth.profile.lastName')}
             </label>
             <div className="relative">
               <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 id="modal-lastName"
                 type="text"
-                placeholder="Your last name"
+                placeholder={t('auth.profile.lastNamePlaceholder')}
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
                 className="pl-10"
@@ -229,7 +233,7 @@ function ProfileTab() {
 
         <Button type="submit" disabled={updateProfileLoading}>
           <Save className="w-4 h-4 mr-2" />
-          {updateProfileLoading ? 'Saving...' : 'Save Changes'}
+          {updateProfileLoading ? t('auth.profile.saving') : t('auth.profile.saveChanges')}
         </Button>
       </form>
     </div>
@@ -252,6 +256,7 @@ function SecurityTab() {
 }
 
 function ChangePasswordSection() {
+  const { t } = useTranslation();
   const { updatePassword, updatePasswordLoading } = useProfile();
 
   const [currentPassword, setCurrentPassword] = useState('');
@@ -269,24 +274,24 @@ function ChangePasswordSection() {
     setPasswordSuccess('');
 
     if (newPassword !== confirmPassword) {
-      setPasswordError('New password and confirm password do not match.');
+      setPasswordError(t('auth.profile.passwordsDoNotMatch'));
       return;
     }
 
     if (newPassword.length < 6) {
-      setPasswordError('New password must be at least 6 characters long.');
+      setPasswordError(t('auth.profile.passwordTooShort'));
       return;
     }
 
     try {
       await updatePassword({ currentPassword, newPassword });
-      setPasswordSuccess('Password updated successfully!');
+      setPasswordSuccess(t('auth.profile.passwordUpdated'));
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
       setTimeout(() => setPasswordSuccess(''), 3000);
     } catch (err: any) {
-      setPasswordError(err.response?.data?.error || err.message || 'Failed to update password.');
+      setPasswordError(err.response?.data?.error || err.message || t('auth.profile.passwordUpdateFailed'));
     }
   };
 
@@ -295,10 +300,10 @@ function ChangePasswordSection() {
       <div>
         <h3 className="text-lg font-semibold flex items-center gap-2 mb-2">
           <Lock className="w-5 h-5" />
-          Change Password
+          {t('auth.profile.changePassword')}
         </h3>
         <p className="text-sm text-muted-foreground">
-          Update your password to keep your account secure.
+          {t('auth.profile.updatePasswordDescription')}
         </p>
       </div>
 
@@ -316,14 +321,14 @@ function ChangePasswordSection() {
 
         <div className="space-y-2">
           <label htmlFor="modal-currentPassword" className="text-sm font-medium">
-            Current Password
+            {t('auth.profile.currentPassword')}
           </label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               id="modal-currentPassword"
               type={showCurrentPassword ? 'text' : 'password'}
-              placeholder="Enter current password"
+              placeholder={t('auth.profile.currentPasswordPlaceholder')}
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               className="pl-10 pr-10"
@@ -348,14 +353,14 @@ function ChangePasswordSection() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <label htmlFor="modal-newPassword" className="text-sm font-medium">
-              New Password
+              {t('auth.profile.newPassword')}
             </label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 id="modal-newPassword"
                 type={showNewPassword ? 'text' : 'password'}
-                placeholder="Enter new password"
+                placeholder={t('auth.profile.newPasswordPlaceholder')}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 className="pl-10 pr-10"
@@ -379,14 +384,14 @@ function ChangePasswordSection() {
 
           <div className="space-y-2">
             <label htmlFor="modal-confirmPassword" className="text-sm font-medium">
-              Confirm New Password
+              {t('auth.profile.confirmPassword')}
             </label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 id="modal-confirmPassword"
                 type={showConfirmPassword ? 'text' : 'password'}
-                placeholder="Confirm new password"
+                placeholder={t('auth.profile.confirmPasswordPlaceholder')}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="pl-10 pr-10"
@@ -411,7 +416,7 @@ function ChangePasswordSection() {
 
         <Button type="submit" disabled={updatePasswordLoading || !currentPassword || !newPassword || !confirmPassword}>
           <Save className="w-4 h-4 mr-2" />
-          {updatePasswordLoading ? 'Updating...' : 'Update Password'}
+          {updatePasswordLoading ? t('auth.profile.updating') : t('auth.profile.updatePassword')}
         </Button>
       </form>
     </div>

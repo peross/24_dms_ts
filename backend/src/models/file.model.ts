@@ -12,6 +12,7 @@ interface FileAttributes {
   folderId?: number;
   userId: number;
   permissions: string;
+  currentVersion: number;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -27,6 +28,7 @@ export class File extends Model<FileAttributes, FileCreationAttributes> implemen
   public folderId?: number;
   public userId!: number;
   public permissions!: string;
+  public currentVersion!: number;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 
@@ -88,6 +90,12 @@ File.init(
       allowNull: false,
       defaultValue: '644',
       field: 'permissions',
+    },
+    currentVersion: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 1,
+      field: 'current_version',
     },
     createdAt: {
       type: DataTypes.DATE,

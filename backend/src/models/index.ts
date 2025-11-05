@@ -4,9 +4,10 @@ import UserRole from './user-role.model';
 import RefreshToken from './refresh-token.model';
 import Folder from './folder.model';
 import File from './file.model';
+import FileVersion from './file-version.model';
 
 // Export all models
-export { User, Role, UserRole, RefreshToken, Folder, File };
+export { User, Role, UserRole, RefreshToken, Folder, File, FileVersion };
 
 // Export associations setup
 export const setupAssociations = () => {

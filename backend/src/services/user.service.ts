@@ -1,5 +1,6 @@
 import User from '../models/user.model';
 import Role from '../models/role.model';
+import UserRole from '../models/user-role.model';
 import { hashPassword, comparePassword } from '../utils/password.util';
 
 export interface CreateUserDto {
@@ -44,9 +45,15 @@ export class UserService {
       lastName: data.lastName,
     });
 
-    // Assign roles if provided
+    // Assign roles if provided, otherwise assign default 'member' role
     if (data.roleNames && data.roleNames.length > 0) {
       await this.assignRoles(user.userId, data.roleNames);
+    } else {
+      // Assign default 'member' role if no roles are provided
+      const defaultRole = await Role.findOne({ where: { name: 'member' } });
+      if (defaultRole) {
+        await (user as any).addRole(defaultRole);
+      }
     }
 
     // Remove password from response
@@ -77,34 +84,54 @@ export class UserService {
   }
 
   async findById(userId: number): Promise<User | null> {
-    return await User.findByPk(userId, {
+    const user = await User.findByPk(userId, {
       attributes: { exclude: ['password'] },
-      include: [
-        {
-          model: Role,
-          as: 'roles',
-          through: { attributes: [] },
-        },
-      ],
     });
+
+    if (!user) {
+      return null;
+    }
+
+    // Get roles from user_roles table
+    const roles = await this.getUserRoles(userId);
+    
+    // Add roles as array of strings to match frontend User interface
+    (user as any).roles = roles;
+
+    return user;
   }
 
+  /**
+   * Get user roles by querying the user_roles join table
+   */
   async getUserRoles(userId: number): Promise<string[]> {
-    const user = await User.findByPk(userId, {
+    // Query roles through the user_roles join table
+    const userRoles = await UserRole.findAll({
+      where: { userId },
       include: [
         {
           model: Role,
-          as: 'roles',
-          through: { attributes: [] },
+          as: 'role',
+          attributes: ['name'],
         },
       ],
     });
 
-    if (!user || !(user as any).roles) {
+    if (!userRoles || userRoles.length === 0) {
+      console.log(`No roles found for user ${userId}`);
       return [];
     }
 
-    return ((user as any).roles as Role[]).map((role) => role.name);
+    const roles = userRoles
+      .map((userRole) => {
+        // Handle both direct access and JSON serialization
+        const role = (userRole as any).role || (userRole as any).get?.('role');
+        return role?.name || role?.dataValues?.name;
+      })
+      .filter((name): name is string => !!name);
+
+    console.log(`Roles for user ${userId}:`, roles);
+    return roles;
   }
 
   async assignRoles(userId: number, roleNames: string[]): Promise<void> {
@@ -121,7 +148,43 @@ export class UserService {
       throw new Error('One or more roles not found');
     }
 
-    await (user as any).setRoles(roles);
+    // Use addRoles instead of setRoles to avoid issues with bulk operations
+    // This ensures each role is added individually
+    for (const role of roles) {
+      await (user as any).addRole(role);
+    }
+  }
+
+  /**
+   * Replace all user roles with new ones
+   * First removes all existing roles, then assigns new ones
+   */
+  async setRoles(userId: number, roleNames: string[]): Promise<void> {
+    const user = await User.findByPk(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    const roles = await Role.findAll({
+      where: { name: roleNames },
+    });
+
+    if (roles.length !== roleNames.length) {
+      throw new Error('One or more roles not found');
+    }
+
+    // Remove all existing roles by deleting from user_roles table directly
+    await UserRole.destroy({
+      where: { userId: user.userId },
+    });
+
+    // Then create new role assignments directly in the join table
+    for (const role of roles) {
+      await UserRole.create({
+        userId: user.userId,
+        roleId: role.roleId,
+      });
+    }
   }
 
   async verifyPassword(user: User, password: string): Promise<boolean> {
@@ -131,15 +194,21 @@ export class UserService {
   async getUserProfile(userId: number): Promise<User | null> {
     const user = await User.findByPk(userId, {
       attributes: { exclude: ['password'] },
-      include: [
-        {
-          model: Role,
-          as: 'roles',
-          through: { attributes: [] },
-        },
-      ],
     });
-    return user;
+
+    if (!user) {
+      return null;
+    }
+
+    // Get roles from user_roles table
+    const roles = await this.getUserRoles(userId);
+    
+    // Convert to JSON and add roles as array of strings
+    const userJson = user.toJSON();
+    (userJson as any).roles = roles;
+
+    // Return the plain object with roles included
+    return userJson as User;
   }
 
   async updateProfile(userId: number, data: { email?: string; username?: string; firstName?: string; lastName?: string }): Promise<User> {

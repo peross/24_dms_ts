@@ -12,6 +12,13 @@ export interface SeedUser {
 
 export const seedUsers: SeedUser[] = [
   {
+    email: 'superadmin@demo.com',
+    password: 'superadmin123',
+    firstName: 'Super',
+    lastName: 'Admin',
+    roleNames: ['super_admin'],
+  },
+  {
     email: 'admin@demo.com',
     password: 'admin123',
     firstName: 'Admin',
@@ -19,11 +26,11 @@ export const seedUsers: SeedUser[] = [
     roleNames: ['admin'],
   },
   {
-    email: 'user@demo.com',
-    password: 'user123',
+    email: 'member@demo.com',
+    password: 'member123',
     firstName: 'Regular',
-    lastName: 'User',
-    roleNames: ['user'],
+    lastName: 'Member',
+    roleNames: ['member'],
   },
 ];
 
@@ -32,19 +39,37 @@ export const seedUsersData = async (): Promise<void> => {
     console.log('🌱 Seeding users...');
 
     // Ensure roles exist first
+    const memberRole = await Role.findOne({ where: { name: 'member' } });
     const adminRole = await Role.findOne({ where: { name: 'admin' } });
-    const userRole = await Role.findOne({ where: { name: 'user' } });
+    const superAdminRole = await Role.findOne({ where: { name: 'super_admin' } });
 
-    if (!adminRole || !userRole) {
+    if (!memberRole || !adminRole || !superAdminRole) {
       throw new Error('Roles must be seeded before users. Please run role seed first.');
     }
 
     for (const userData of seedUsers) {
       // Check if user already exists
-      const existingUser = await User.findOne({ where: { email: userData.email } });
+      const existingUser = await User.findOne({ 
+        where: { email: userData.email },
+      });
 
       if (existingUser) {
-        console.log(`⏭️  User ${userData.email} already exists, skipping...`);
+        // Get current roles from user_roles table
+        const currentRoles = await UserService.getUserRoles(existingUser.userId);
+        const expectedRoles = userData.roleNames.sort();
+        const hasCorrectRoles = currentRoles.sort().join(',') === expectedRoles.join(',');
+
+        if (!hasCorrectRoles) {
+          // Update roles to match expected ones
+          console.log(`🔄 User ${userData.email} exists but has different roles. Updating roles...`);
+          console.log(`   Current: [${currentRoles.join(', ')}]`);
+          console.log(`   Expected: [${expectedRoles.join(', ')}]`);
+          
+          await UserService.setRoles(existingUser.userId, userData.roleNames);
+          console.log(`✅ Updated user: ${userData.email} with roles: ${userData.roleNames.join(', ')}`);
+        } else {
+          console.log(`⏭️  User ${userData.email} already exists with correct roles, skipping...`);
+        }
         continue;
       }
 

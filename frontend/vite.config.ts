@@ -15,5 +15,9 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['react', 'react-dom', '@tanstack/react-query'],
+    exclude: ['pdfjs-dist'],
+  },
+  worker: {
+    format: 'es',
   },
 })

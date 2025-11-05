@@ -7,12 +7,16 @@ export interface SeedRole {
 
 export const seedRoles: SeedRole[] = [
   {
-    name: 'admin',
-    description: 'Administrator with full access',
+    name: 'member',
+    description: 'Regular member with basic access',
   },
   {
-    name: 'user',
-    description: 'Regular user with standard access',
+    name: 'admin',
+    description: 'Administrator with elevated access',
+  },
+  {
+    name: 'super_admin',
+    description: 'Super administrator with full system access',
   },
 ];
 

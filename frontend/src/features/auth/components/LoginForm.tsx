@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { User, Lock, Eye, EyeOff, Shield } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 export function LoginForm() {
+  const { t } = useTranslation();
   const { login, loginLoading } = useAuth();
   const [emailOrUsername, setEmailOrUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -30,7 +32,7 @@ export function LoginForm() {
         return;
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Login failed. Please check your credentials.');
+      setError(err.response?.data?.error || err.message || t('auth.login.loginFailed'));
       // Reset 2FA state on error
       if (requiresTwoFactor) {
         setRequiresTwoFactor(false);
@@ -49,14 +51,14 @@ export function LoginForm() {
 
       <div className="space-y-2">
         <label htmlFor="emailOrUsername" className="text-sm font-medium">
-          Email or Username
+          {t('auth.login.emailOrUsername')}
         </label>
         <div className="relative">
           <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             id="emailOrUsername"
             type="text"
-            placeholder="email@example.com or username"
+            placeholder={t('auth.login.emailOrUsernamePlaceholder')}
             value={emailOrUsername}
             onChange={(e) => setEmailOrUsername(e.target.value)}
             className="pl-10"
@@ -68,14 +70,14 @@ export function LoginForm() {
 
       <div className="space-y-2">
         <label htmlFor="password" className="text-sm font-medium">
-          Password
+          {t('auth.login.password')}
         </label>
         <div className="relative">
           <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             id="password"
             type={showPassword ? 'text' : 'password'}
-            placeholder="Enter your password"
+            placeholder={t('auth.login.passwordPlaceholder')}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="pl-10 pr-10"
@@ -101,12 +103,12 @@ export function LoginForm() {
         <div className="space-y-2">
           <label htmlFor="twoFactorToken" className="text-sm font-medium flex items-center gap-2">
             <Shield className="w-4 h-4" />
-            Two-Factor Authentication Code
+            {t('auth.login.twoFactorCode')}
           </label>
           <Input
             id="twoFactorToken"
             type="text"
-            placeholder="000000"
+            placeholder={t('auth.login.twoFactorCodePlaceholder')}
             value={twoFactorToken}
             onChange={(e) => setTwoFactorToken(e.target.value.replace(/\D/g, '').slice(0, 6))}
             maxLength={6}
@@ -116,7 +118,7 @@ export function LoginForm() {
             autoFocus
           />
           <p className="text-xs text-muted-foreground">
-            Enter the 6-digit code from your authenticator app or a backup code
+            {t('auth.login.twoFactorHint')}
           </p>
         </div>
       )}
@@ -131,7 +133,7 @@ export function LoginForm() {
           (requiresTwoFactor && twoFactorToken.length !== 6)
         }
       >
-        {loginLoading ? 'Signing in...' : requiresTwoFactor ? 'Verify and Sign in' : 'Sign in'}
+        {loginLoading ? t('auth.login.signingIn') : requiresTwoFactor ? t('auth.login.verifyAndSignIn') : t('auth.login.signIn')}
       </Button>
     </form>
   );
