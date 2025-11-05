@@ -1,5 +1,4 @@
 import { useState, useMemo } from "react"
-import { useNavigate } from "react-router-dom"
 import { FileGridView } from "./FileGridView"
 import { FileListView } from "./FileListView"
 import { useLayout } from "@/components/Layout"
@@ -15,6 +14,16 @@ import { UploadNewVersionDialog } from "@/features/files/components/UploadNewVer
 import { VersionHistoryDialog } from "@/features/files/components/VersionHistoryDialog"
 import { FileContextMenu, FileContextMenuHandlersProvider } from "@/features/files/components/FileContextMenu"
 import { fileApi } from "@/lib/api/file.api"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 export type ViewMode = "grid" | "list"
 
@@ -49,15 +58,22 @@ function formatDate(dateString: string, locale: string = 'en'): string {
 
 export function FileList({ viewMode }: FileListProps) {
   const { t, i18n } = useTranslation()
-  const navigate = useNavigate()
   const { selectedFolderId, navigateToFolder, navigateToRoute, selectedItems, setSelectedItems } = useLayout()
   const selected = selectedItems
-  const setSelected = setSelectedItems
+  const setSelected = (value: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+    if (typeof value === 'function') {
+      setSelectedItems(value(selectedItems))
+    } else {
+      setSelectedItems(value)
+    }
+  }
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
   const [moveDialogOpen, setMoveDialogOpen] = useState(false)
   const [uploadVersionDialogOpen, setUploadVersionDialogOpen] = useState(false)
   const [versionHistoryDialogOpen, setVersionHistoryDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [currentItem, setCurrentItem] = useState<FileItem | null>(null)
+  const [itemsToDelete, setItemsToDelete] = useState<FileItem[]>([])
   
   const { clipboard, clear: clearClipboard, canPaste, cut, copy } = useClipboard()
   const updateFileMutation = useUpdateFile()
@@ -258,16 +274,18 @@ export function FileList({ viewMode }: FileListProps) {
     }
   }
 
-  const handleDelete = async (item: FileItem) => {
+  const handleDelete = (item: FileItem) => {
     // Get selected items or use the clicked item
     const selectedItems = Array.from(selected).map(name => 
       allItems.find(item => item.name === name)
     ).filter((item): item is FileItem => item !== undefined)
     
-    const itemsToDelete = selectedItems.length > 0 ? selectedItems : [item]
-    
-    if (!confirm(t('files.confirmDelete', { name: itemsToDelete.length > 1 ? `${itemsToDelete.length} items` : item.name }))) return
+    const itemsToDeleteData = selectedItems.length > 0 ? selectedItems : [item]
+    setItemsToDelete(itemsToDeleteData)
+    setDeleteDialogOpen(true)
+  }
 
+  const handleDeleteConfirm = async () => {
     try {
       for (const itemToDelete of itemsToDelete) {
         if (itemToDelete.type === "file") {
@@ -278,6 +296,8 @@ export function FileList({ viewMode }: FileListProps) {
       }
       // Clear selection after delete
       setSelected(new Set())
+      setDeleteDialogOpen(false)
+      setItemsToDelete([])
     } catch (error) {
       console.error("Delete failed:", error)
     }
@@ -387,7 +407,7 @@ export function FileList({ viewMode }: FileListProps) {
             selected={selected}
             onSelect={(name: string, ctrlKey: boolean) => {
               if (ctrlKey) {
-                setSelected(prev => {
+                setSelected((prev: Set<string>) => {
                   const next = new Set(prev)
                   if (next.has(name)) {
                     next.delete(name)
@@ -408,7 +428,7 @@ export function FileList({ viewMode }: FileListProps) {
             selected={selected}
             onSelect={(name: string, ctrlKey: boolean) => {
               if (ctrlKey) {
-                setSelected(prev => {
+                setSelected((prev: Set<string>) => {
                   const next = new Set(prev)
                   if (next.has(name)) {
                     next.delete(name)
@@ -455,6 +475,31 @@ export function FileList({ viewMode }: FileListProps) {
           />
         </>
       )}
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('common.delete')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {itemsToDelete.length > 1
+                ? t('files.confirmDelete', { name: `${itemsToDelete.length} items` })
+                : t('files.confirmDelete', { name: itemsToDelete[0]?.name || '' })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteDialogOpen(false)}>
+              {t('common.cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {t('common.delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }
