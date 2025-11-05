@@ -132,6 +132,16 @@
     "userMenu": "Korisnički meni",
     "paste": "Nalepi"
   },
+  "notifications": {
+    "title": "Obaveštenja",
+    "noNotifications": "Nema obaveštenja",
+    "markAllRead": "Označi sve kao pročitano",
+    "clearAll": "Obriši sve",
+    "justNow": "Upravo sada",
+    "minutesAgo": "Pre {{minutes}} min",
+    "hoursAgo": "Pre {{hours}} sati",
+    "daysAgo": "Pre {{days}} dana"
+  },
   "sidebar": {
     "dashboard": "Kontrolna tabla",
     "files": "Fajlovi",

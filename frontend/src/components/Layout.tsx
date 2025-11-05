@@ -12,6 +12,9 @@ interface LayoutContextType {
   setSelectedFolderId: (folderId: number | null) => void
   selectedFolderPath: string
   setSelectedFolderPath: (path: string) => void
+  // File/folder selection state
+  selectedItems: Set<string>
+  setSelectedItems: (items: Set<string>) => void
   // File viewer state for text files
   isTextFile: boolean
   setTextFileSaveHandler: (handler: (() => Promise<void>) | null) => void
@@ -49,6 +52,7 @@ export function Layout({ children }: LayoutProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("list")
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null)
   const [selectedFolderPath, setSelectedFolderPath] = useState<string>("")
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   const [textFileSaveHandler, setTextFileSaveHandler] = useState<(() => Promise<void>) | null>(null)
   
   // Navigation history - track route paths
@@ -72,8 +76,10 @@ export function Layout({ children }: LayoutProps) {
       return newHistory
     })
     setSelectedFolderId(folderId)
+    // Clear selection when navigating to a different folder
+    setSelectedItems(new Set())
     navigate(path)
-  }, [navigationHistoryIndex, navigate])
+  }, [navigationHistoryIndex, navigate, setSelectedItems])
   
   const navigateToRoute = useCallback((path: string) => {
     setNavigationHistory(prev => {
@@ -146,6 +152,8 @@ export function Layout({ children }: LayoutProps) {
       setSelectedFolderId, 
       selectedFolderPath, 
       setSelectedFolderPath,
+      selectedItems,
+      setSelectedItems,
       isTextFile,
       setTextFileSaveHandler,
       getTextFileSaveHandler,

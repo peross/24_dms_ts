@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react"
+import { createContext, useContext, useRef, cloneElement, isValidElement } from "react"
 import { useTranslation } from "react-i18next"
 import {
   ContextMenu,
@@ -16,18 +16,19 @@ import { useClipboard } from "@/contexts/ClipboardContext"
 import { useLayout } from "@/components/Layout"
 
 interface FileContextMenuProps {
-  item: FileItem
-  children: React.ReactNode
-  onOpen?: (item: FileItem) => void
-  onCopy?: (item: FileItem) => void
-  onCut?: (item: FileItem) => void
-  onPaste?: (targetItem: FileItem) => void
-  onMove?: (item: FileItem) => void
-  onDownload?: (item: FileItem) => void
-  onRename?: (item: FileItem) => void
-  onDelete?: (item: FileItem) => void
-  onUploadNewVersion?: (item: FileItem) => void
-  onVersionHistory?: (item: FileItem) => void
+  readonly item: FileItem
+  readonly children: React.ReactNode
+  readonly onSelect?: (item: FileItem, ctrlKey: boolean) => void
+  readonly onOpen?: (item: FileItem) => void
+  readonly onCopy?: (item: FileItem) => void
+  readonly onCut?: (item: FileItem) => void
+  readonly onPaste?: (targetItem: FileItem) => void
+  readonly onMove?: (item: FileItem) => void
+  readonly onDownload?: (item: FileItem) => void
+  readonly onRename?: (item: FileItem) => void
+  readonly onDelete?: (item: FileItem) => void
+  readonly onUploadNewVersion?: (item: FileItem) => void
+  readonly onVersionHistory?: (item: FileItem) => void
 }
 
 const FileContextMenuHandlersContext = createContext<Omit<FileContextMenuProps, 'item' | 'children'> | null>(null)
@@ -54,6 +55,7 @@ export function useFileContextMenuHandlers() {
 export function FileContextMenu({
   item,
   children,
+  onSelect,
   onOpen,
   onCopy,
   onCut,
@@ -66,9 +68,10 @@ export function FileContextMenu({
   onVersionHistory,
 }: FileContextMenuProps) {
   const { t } = useTranslation()
-  const { clipboard, copy, cut, canPaste } = useClipboard()
-  const { selectedFolderId, setSelectedFolderId, setSelectedFolderPath } = useLayout()
+  const { canPaste } = useClipboard()
+  const { setSelectedFolderId } = useLayout()
   const handlers = useFileContextMenuHandlers()
+  const ctrlKeyRef = useRef(false)
   
   // Use handlers from context if available, otherwise use props
   const finalHandlers = {
@@ -88,7 +91,6 @@ export function FileContextMenu({
     if (item.type === "folder") {
       // Navigate to folder
       setSelectedFolderId(item.id)
-      // TODO: Update selectedFolderPath based on folder path
     }
     finalHandlers.onOpen?.(item)
   }
@@ -131,10 +133,38 @@ export function FileContextMenu({
     finalHandlers.onVersionHistory?.(item)
   }
 
+  const handleContextMenuOpen = (open: boolean) => {
+    // When context menu opens, select the item
+    if (open && onSelect) {
+      onSelect(item, ctrlKeyRef.current)
+      // Reset the ref after use
+      ctrlKeyRef.current = false
+    }
+  }
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    // Capture Ctrl/Cmd key state before context menu opens
+    ctrlKeyRef.current = e.ctrlKey || e.metaKey
+  }
+
+  // Clone children to add onContextMenu handler if it's a valid React element
+  const childrenWithHandler = isValidElement(children)
+    ? cloneElement(children, {
+        onContextMenu: (e: React.MouseEvent) => {
+          handleContextMenu(e)
+          // Call original onContextMenu if it exists
+          const originalHandler = (children.props as any)?.onContextMenu
+          if (originalHandler) {
+            originalHandler(e)
+          }
+        },
+      } as any)
+    : children
+
   return (
-    <ContextMenu>
+    <ContextMenu onOpenChange={handleContextMenuOpen}>
       <ContextMenuTrigger asChild>
-        {children}
+        {childrenWithHandler}
       </ContextMenuTrigger>
       <ContextMenuContent className="w-56">
         <ContextMenuItem onClick={handleOpen}>

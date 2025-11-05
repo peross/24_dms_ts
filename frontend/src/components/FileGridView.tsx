@@ -18,19 +18,43 @@ interface FileGridViewProps {
   onSelect: (name: string, ctrlKey: boolean) => void
   onDoubleClick?: (item: FileItem) => void
   onContextMenu?: (item: FileItem, event: React.MouseEvent) => void
+  onDeselectAll?: () => void
 }
 
-export function FileGridView({ files, selected, onSelect, onDoubleClick, onContextMenu }: FileGridViewProps) {
+export function FileGridView({ files, selected, onSelect, onDoubleClick, onDeselectAll }: FileGridViewProps) {
+  const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Only deselect if clicking directly on the container or grid (empty space)
+    const target = e.target as HTMLElement
+    if (target === e.currentTarget || target.classList.contains('grid') || target === e.currentTarget.querySelector('.grid')) {
+      onDeselectAll?.()
+    }
+  }
+
   return (
-    <div className="flex-1 bg-card h-full overflow-y-auto p-4">
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+    <div 
+      className="flex-1 bg-card h-full overflow-y-auto p-4"
+      onClick={handleContainerClick}
+    >
+      <div 
+        className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4"
+        onClick={(e) => {
+          // If clicking on the grid container itself (not on a file/folder), deselect
+          if (e.target === e.currentTarget) {
+            onDeselectAll?.()
+          }
+        }}
+      >
         {files.map((file) => (
           <FileContextMenu
             key={`${file.type}-${file.id}`}
             item={file}
+            onSelect={(item, ctrlKey) => onSelect(item.name, ctrlKey)}
           >
             <div
-              onClick={(e) => onSelect(file.name, e.ctrlKey || e.metaKey)}
+              onClick={(e) => {
+                e.stopPropagation() // Prevent event from bubbling to container
+                onSelect(file.name, e.ctrlKey || e.metaKey)
+              }}
               onDoubleClick={() => onDoubleClick?.(file)}
               className={cn(
                 "flex flex-col items-center p-3 sm:p-4 rounded-lg border-2 cursor-pointer transition-all hover:border-primary/50 hover:shadow-md",

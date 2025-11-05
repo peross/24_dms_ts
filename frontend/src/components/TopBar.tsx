@@ -1,15 +1,16 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Menu, Bell, LogOut, User } from "lucide-react"
+import { Menu, LogOut, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ThemeToggle } from "./ThemeToggle"
 import { LanguageSelector } from "./LanguageSelector"
+import { NotificationDropdown } from "./NotificationDropdown"
 import { useAuth } from "@/features/auth/hooks/useAuth"
 import { ProfileModal } from "@/features/auth/components/ProfileModal"
 
 interface TopBarProps {
-  onMobileMenuClick?: () => void
+  readonly onMobileMenuClick?: () => void
 }
 
 export function TopBar({ onMobileMenuClick }: TopBarProps) {
@@ -45,9 +46,7 @@ export function TopBar({ onMobileMenuClick }: TopBarProps) {
 
         {/* Right side: User controls */}
         <div className="flex items-center gap-1 sm:gap-2 ml-auto">
-          <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-10 sm:w-10" title={t('header.notifications')}>
-            <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
-          </Button>
+          <NotificationDropdown />
           <LanguageSelector />
           <ThemeToggle />
           <DropdownMenu>

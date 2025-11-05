@@ -50,8 +50,9 @@ function formatDate(dateString: string, locale: string = 'en'): string {
 export function FileList({ viewMode }: FileListProps) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
-  const { selectedFolderId, navigateToFolder, navigateToRoute } = useLayout()
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const { selectedFolderId, navigateToFolder, navigateToRoute, selectedItems, setSelectedItems } = useLayout()
+  const selected = selectedItems
+  const setSelected = setSelectedItems
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
   const [moveDialogOpen, setMoveDialogOpen] = useState(false)
   const [uploadVersionDialogOpen, setUploadVersionDialogOpen] = useState(false)
@@ -399,6 +400,7 @@ export function FileList({ viewMode }: FileListProps) {
                 setSelected(new Set([name]))
               }
             }}
+            onDeselectAll={() => setSelected(new Set())}
           />
         ) : (
           <FileListView
@@ -420,6 +422,7 @@ export function FileList({ viewMode }: FileListProps) {
               }
             }}
             onDoubleClick={handleDoubleClick}
+            onDeselectAll={() => setSelected(new Set())}
           />
         )}
       </FileContextMenuHandlersProvider>

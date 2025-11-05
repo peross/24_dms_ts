@@ -8,9 +8,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      // Ensure React is resolved to a single instance
-      react: path.resolve(__dirname, "./node_modules/react"),
-      "react-dom": path.resolve(__dirname, "./node_modules/react-dom"),
+      // Ensure React is resolved to a single instance (check root node_modules first for workspace hoisting)
+      react: path.resolve(__dirname, "../node_modules/react"),
+      "react-dom": path.resolve(__dirname, "../node_modules/react-dom"),
     },
   },
   optimizeDeps: {

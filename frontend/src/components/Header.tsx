@@ -16,15 +16,15 @@ import {
   ChevronUp,
   RefreshCw,
   Search,
-  Bell,
   Menu,
   LogOut,
   User,
   Grid3x3,
   List,
   Save,
+  Clipboard,
 } from "lucide-react"
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useTranslation } from 'react-i18next'
 import { Button } from "@/components/ui/button"
@@ -33,13 +33,13 @@ import { Separator } from "@/components/ui/separator"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { ThemeToggle } from "./ThemeToggle"
 import { LanguageSelector } from "./LanguageSelector"
+import { NotificationDropdown } from "./NotificationDropdown"
 import { useAuth } from "@/features/auth/hooks/useAuth"
 import { ProfileModal } from "@/features/auth/components/ProfileModal"
 import { CreateFolderDialog } from "@/features/folders/components/CreateFolderDialog"
 import { UploadFileDialog } from "@/features/files/components/UploadFileDialog"
 import { useLayout } from "@/components/Layout"
 import { useClipboard } from "@/contexts/ClipboardContext"
-import { Clipboard } from "lucide-react"
 import { useUpdateFile } from "@/features/files/hooks/useFiles"
 import { useUpdateFolder } from "@/features/folders/hooks/useFolders"
 import { folderApi } from "@/lib/api/folder.api"
@@ -56,15 +56,17 @@ export function Header({ onMobileMenuClick, viewMode, onViewModeChange }: Header
   const { 
     selectedFolderPath, 
     selectedFolderId, 
+    selectedItems,
     isTextFile, 
     getTextFileSaveHandler,
     navigateToFolder,
-    navigateToRoute,
     navigateBack,
     navigateForward,
     canNavigateBack,
     canNavigateForward
   } = useLayout()
+  
+  const hasSelectedItems = selectedItems.size > 0
   const { clipboard, canPaste, clear: clearClipboard } = useClipboard()
   const updateFileMutation = useUpdateFile()
   const updateFolderMutation = useUpdateFolder()
@@ -72,6 +74,12 @@ export function Header({ onMobileMenuClick, viewMode, onViewModeChange }: Header
   const [profileModalOpen, setProfileModalOpen] = useState(false)
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false)
   const [uploadFileDialogOpen, setUploadFileDialogOpen] = useState(false)
+  
+  // Responsive button overflow handling
+  const buttonsContainerRef = useRef<HTMLDivElement>(null)
+  const buttonsWrapperRef = useRef<HTMLDivElement>(null)
+  const overflowButtonRef = useRef<HTMLButtonElement>(null)
+  const [overflowButtonCount, setOverflowButtonCount] = useState(0)
 
   const handleLogout = async () => {
     try {
@@ -144,10 +152,106 @@ export function Header({ onMobileMenuClick, viewMode, onViewModeChange }: Header
     queryClient.invalidateQueries({ queryKey: ['folders', 'tree'] })
   }
 
+  // All buttons that can be moved to dropdown (defined after handlers are available)
+  const allButtons = [
+    { id: 'save', condition: isTextFile, icon: Save, label: t('files.save'), onClick: handleSaveTextFile, disabled: false },
+    { id: 'addFile', condition: true, icon: FilePlus, label: t('header.addFile'), onClick: () => {}, disabled: false },
+    { id: 'addFolder', condition: true, icon: FolderPlus, label: t('header.addFolder'), onClick: () => setCreateFolderDialogOpen(true), disabled: false },
+    { id: 'upload', condition: true, icon: Upload, label: t('header.upload'), onClick: () => setUploadFileDialogOpen(true), disabled: selectedFolderId === null },
+    { id: 'paste', condition: canPaste() && selectedFolderId !== null, icon: Clipboard, label: t('header.paste'), onClick: handlePaste, disabled: false },
+    { id: 'copy', condition: true, icon: Copy, label: t('header.copy'), onClick: () => {}, disabled: !hasSelectedItems },
+    { id: 'move', condition: true, icon: FolderInput, label: t('header.move'), onClick: () => {}, disabled: !hasSelectedItems },
+    { id: 'download', condition: true, icon: Download, label: t('header.download'), onClick: () => {}, disabled: !hasSelectedItems },
+    { id: 'rename', condition: true, icon: Pencil, label: t('header.rename'), onClick: () => {}, disabled: !hasSelectedItems },
+    { id: 'delete', condition: true, icon: Trash2, label: t('header.delete'), onClick: () => {}, disabled: !hasSelectedItems },
+    { id: 'archive', condition: true, icon: Archive, label: t('header.archive'), onClick: () => {}, disabled: !hasSelectedItems },
+    { id: 'permission', condition: true, icon: Key, label: t('header.permission'), onClick: () => {}, disabled: false },
+  ]
+  
+  const enabledButtons = allButtons.filter(btn => btn.condition)
+  
+  useEffect(() => {
+    const updateOverflow = () => {
+      if (!buttonsContainerRef.current || !buttonsWrapperRef.current) {
+        setOverflowButtonCount(0)
+        return
+      }
+      
+      const container = buttonsContainerRef.current
+      const wrapper = buttonsWrapperRef.current
+      
+      const containerWidth = container.offsetWidth
+      const mobileMenuWidth = onMobileMenuClick ? 40 : 0
+      const padding = 32 // Total padding on both sides
+      const overflowButtonWidth = overflowButtonRef.current?.offsetWidth || 120 // Fallback if not rendered yet
+      
+      // Available width for buttons (reserve space for overflow button if needed)
+      const availableWidth = containerWidth - mobileMenuWidth - padding - overflowButtonWidth
+      
+      // Get all button container divs (each button is wrapped in a div)
+      const buttonContainers = Array.from(wrapper.children) as HTMLElement[]
+      
+      let totalWidth = 0
+      let visibleCount = 0
+      
+      // Calculate which buttons fit
+      for (let i = 0; i < buttonContainers.length; i++) {
+        const container = buttonContainers[i]
+        const button = container.querySelector('button') as HTMLElement
+        
+        if (!button) continue
+        
+        const containerWidth = container.offsetWidth || container.getBoundingClientRect().width
+        
+        // Check if there's a separator before this button (rough estimate)
+        const hasSeparatorBefore = i > 0 && (i === 4 || i === 8)
+        const separatorWidth = hasSeparatorBefore ? 24 : 0
+        
+        if (totalWidth + containerWidth + separatorWidth > availableWidth) {
+          break
+        }
+        
+        totalWidth += containerWidth + separatorWidth
+        visibleCount++
+      }
+      
+      // Calculate overflow count
+      const totalButtons = enabledButtons.length
+      const overflowCount = Math.max(0, totalButtons - visibleCount)
+      
+      setOverflowButtonCount(overflowCount)
+    }
+    
+    // Initial update after DOM is ready
+    const timeout = setTimeout(updateOverflow, 100)
+    
+    const resizeObserver = new ResizeObserver(() => {
+      updateOverflow()
+    })
+    
+    if (buttonsContainerRef.current) {
+      resizeObserver.observe(buttonsContainerRef.current)
+    }
+    
+    window.addEventListener('resize', updateOverflow)
+    
+    return () => {
+      clearTimeout(timeout)
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', updateOverflow)
+    }
+  }, [onMobileMenuClick, enabledButtons.length, isTextFile, canPaste, selectedFolderId, hasSelectedItems])
+  
+  const visibleButtons = enabledButtons.slice(0, Math.max(0, enabledButtons.length - overflowButtonCount))
+  const overflowButtons = enabledButtons.slice(Math.max(0, enabledButtons.length - overflowButtonCount))
+
   return (
     <div className="bg-card border-b border-border flex flex-col">
       {/* First Row: Action Buttons */}
-      <div className="h-14 flex items-center gap-1 sm:gap-2 px-2 sm:px-4 border-b border-border overflow-x-auto">
+      <div 
+        ref={buttonsContainerRef}
+        className="h-14 flex items-center gap-1 sm:gap-2 px-2 sm:px-4 border-b border-border overflow-x-auto"
+      >
         {/* Mobile Menu Button */}
         {onMobileMenuClick && (
           <Button
@@ -159,88 +263,62 @@ export function Header({ onMobileMenuClick, viewMode, onViewModeChange }: Header
             <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
           </Button>
         )}
-        {isTextFile && (
-          <Button 
-            variant="ghost" 
-            className="gap-1 sm:gap-2 shrink-0"
-            onClick={handleSaveTextFile}
-          >
-            <Save className="w-4 h-4" />
-            <span className="hidden sm:inline">{t('files.save')}</span>
-          </Button>
+        
+        {/* Visible Buttons */}
+        <div ref={buttonsWrapperRef} className="flex items-center gap-1 sm:gap-2 shrink-0">
+          {visibleButtons.map((button, index) => {
+            const Icon = button.icon
+            // Add separator after groups of buttons
+            const showSeparator = index > 0 && (index === 3 || index === 7)
+            
+            return (
+              <div key={button.id} className="flex items-center gap-1 sm:gap-2">
+                {showSeparator && <Separator orientation="vertical" className="h-6 hidden sm:block" />}
+                <Button 
+                  variant="ghost" 
+                  className="gap-1 sm:gap-2 shrink-0"
+                  onClick={button.onClick}
+                  title={button.label}
+                  disabled={button.disabled}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span className="hidden sm:inline">{button.label}</span>
+                </Button>
+              </div>
+            )
+          })}
+        </div>
+        
+        {/* Overflow Dropdown (only show if there are overflow buttons) */}
+        {overflowButtonCount > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                ref={overflowButtonRef}
+                variant="ghost" 
+                className="gap-1 sm:gap-2 shrink-0"
+              >
+                <MoreVertical className="w-4 h-4" />
+                <span className="hidden sm:inline">{t('header.allTools')}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              {overflowButtons.map((button) => {
+                const Icon = button.icon
+                return (
+                  <DropdownMenuItem 
+                    key={button.id} 
+                    onClick={button.disabled ? undefined : button.onClick}
+                    disabled={button.disabled}
+                  >
+                    <Icon className="w-4 h-4 mr-2" />
+                    <span>{button.label}</span>
+                  </DropdownMenuItem>
+                )
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
-        <Button variant="ghost" className="gap-1 sm:gap-2 shrink-0">
-          <FilePlus className="w-4 h-4" />
-          <span className="hidden sm:inline">{t('header.addFile')}</span>
-        </Button>
-        <Button 
-          variant="ghost" 
-          className="gap-1 sm:gap-2 shrink-0"
-          onClick={() => setCreateFolderDialogOpen(true)}
-        >
-          <FolderPlus className="w-4 h-4" />
-          <span className="hidden sm:inline">{t('header.addFolder')}</span>
-        </Button>
-        <Button 
-          variant="ghost" 
-          className="gap-1 sm:gap-2 shrink-0"
-          onClick={() => setUploadFileDialogOpen(true)}
-        >
-          <Upload className="w-4 h-4" />
-          <span className="hidden sm:inline">{t('header.upload')}</span>
-        </Button>
-        <Separator orientation="vertical" className="h-6 hidden sm:block" />
-        {canPaste() && selectedFolderId !== null && (
-          <Button 
-            variant="ghost" 
-            className="gap-1 sm:gap-2 shrink-0"
-            onClick={handlePaste}
-            title={t('header.paste')}
-          >
-            <Clipboard className="w-4 h-4" />
-            <span className="hidden sm:inline">{t('header.paste')}</span>
-          </Button>
-        )}
-        <Button variant="ghost" className="gap-1 sm:gap-2 shrink-0">
-          <Copy className="w-4 h-4" />
-          <span className="hidden sm:inline">{t('header.copy')}</span>
-        </Button>
-        <Button variant="ghost" className="gap-1 sm:gap-2 shrink-0">
-          <FolderInput className="w-4 h-4" />
-          <span className="hidden sm:inline">{t('header.move')}</span>
-        </Button>
-        <Button variant="ghost" className="gap-1 sm:gap-2 shrink-0">
-          <Download className="w-4 h-4" />
-          <span className="hidden sm:inline">{t('header.download')}</span>
-        </Button>
-        <Button variant="ghost" className="gap-1 sm:gap-2 shrink-0">
-          <Pencil className="w-4 h-4" />
-          <span className="hidden md:inline">{t('header.rename')}</span>
-        </Button>
-        <Button variant="ghost" className="gap-1 sm:gap-2 shrink-0">
-          <Trash2 className="w-4 h-4" />
-          <span className="hidden sm:inline">{t('header.delete')}</span>
-        </Button>
-        <Separator orientation="vertical" className="h-6 hidden sm:block" />
-        <Button variant="ghost" className="gap-1 sm:gap-2 shrink-0">
-          <Archive className="w-4 h-4" />
-          <span className="hidden md:inline">{t('header.archive')}</span>
-        </Button>
-        <Button variant="ghost" className="gap-1 sm:gap-2 shrink-0">
-          <Key className="w-4 h-4" />
-          <span className="hidden md:inline">{t('header.permission')}</span>
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="gap-1 sm:gap-2 shrink-0">
-              <MoreVertical className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('header.allTools')}</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem>{t('header.moreOptions')}</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
 
       {/* Second Row: Navigation Controls, Path, Search, User Icons */}
@@ -341,9 +419,7 @@ export function Header({ onMobileMenuClick, viewMode, onViewModeChange }: Header
 
         {/* User/Settings Icons */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-10 sm:w-10" title={t('header.notifications')}>
-            <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
-          </Button>
+          <NotificationDropdown />
           <LanguageSelector />
           <ThemeToggle />
           <DropdownMenu>

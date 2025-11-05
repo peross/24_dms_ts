@@ -136,6 +136,16 @@
     "userMenu": "User menu",
     "paste": "Paste"
   },
+  "notifications": {
+    "title": "Notifications",
+    "noNotifications": "No notifications",
+    "markAllRead": "Mark all read",
+    "clearAll": "Clear all",
+    "justNow": "Just now",
+    "minutesAgo": "{{minutes}}m ago",
+    "hoursAgo": "{{hours}}h ago",
+    "daysAgo": "{{days}}d ago"
+  },
   "sidebar": {
     "dashboard": "Dashboard",
     "files": "Files",

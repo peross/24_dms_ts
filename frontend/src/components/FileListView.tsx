@@ -9,13 +9,44 @@ interface FileListViewProps {
   onSelect: (name: string, ctrlKey: boolean) => void
   onDoubleClick?: (item: FileItem) => void
   onContextMenu?: (item: FileItem, event: React.MouseEvent) => void
+  onDeselectAll?: () => void
 }
 
-export function FileListView({ files, selected, onSelect, onDoubleClick, onContextMenu }: FileListViewProps) {
+export function FileListView({ files, selected, onSelect, onDoubleClick, onDeselectAll }: FileListViewProps) {
+  const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Only deselect if clicking directly on the container (not on the table or rows)
+    const target = e.target as HTMLElement
+    // Check if click is on the container itself or on empty space in the table
+    if (target === e.currentTarget || 
+        (target.tagName === 'DIV' && target.classList.contains('border-b')) ||
+        (target.tagName === 'TABLE' && target === e.currentTarget.querySelector('table'))) {
+      onDeselectAll?.()
+    }
+  }
+
   return (
-    <div className="flex-1 bg-card h-full overflow-y-auto min-w-0">
-      <div className="border-b border-border overflow-x-auto">
-        <table className="w-full min-w-[600px]">
+    <div 
+      className="flex-1 bg-card h-full overflow-y-auto min-w-0"
+      onClick={handleContainerClick}
+    >
+      <div 
+        className="border-b border-border overflow-x-auto"
+        onClick={(e) => {
+          // If clicking on the wrapper div (not on table), deselect
+          if (e.target === e.currentTarget) {
+            onDeselectAll?.()
+          }
+        }}
+      >
+        <table 
+          className="w-full min-w-[600px]"
+          onClick={(e) => {
+            // If clicking on the table element itself (not on rows), deselect
+            if (e.target === e.currentTarget) {
+              onDeselectAll?.()
+            }
+          }}
+        >
           <thead className="bg-muted/50">
             <tr>
               <th className="text-left px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-semibold text-muted-foreground">Name</th>
@@ -29,13 +60,17 @@ export function FileListView({ files, selected, onSelect, onDoubleClick, onConte
               <FileContextMenu
                 key={`${file.type}-${file.id}`}
                 item={file}
+                onSelect={(item, ctrlKey) => onSelect(item.name, ctrlKey)}
               >
                 <tr
                   className={cn(
                     "cursor-pointer hover:bg-accent transition-colors",
                     selected.has(file.name) && "bg-primary/15 dark:bg-primary/20"
                   )}
-                  onClick={(e) => onSelect(file.name, e.ctrlKey || e.metaKey)}
+                  onClick={(e) => {
+                    e.stopPropagation() // Prevent event from bubbling to container
+                    onSelect(file.name, e.ctrlKey || e.metaKey)
+                  }}
                   onDoubleClick={() => onDoubleClick?.(file)}
                 >
                   <td className="px-2 sm:px-4 py-2 sm:py-3">
