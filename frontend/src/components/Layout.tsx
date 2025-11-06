@@ -22,7 +22,7 @@ interface LayoutContextType {
   // Navigation history
   navigationHistory: string[]
   navigationHistoryIndex: number
-  navigateToFolder: (folderId: number | null) => void
+  navigateToFolder: (folderId: number | null, systemFolderId?: number) => void
   navigateToRoute: (path: string) => void
   navigateBack: () => void
   navigateForward: () => void
@@ -63,14 +63,32 @@ export function Layout({ children }: LayoutProps) {
   const isTextFile = textFileSaveHandler !== null
   
   // Navigation functions
-  const navigateToFolder = useCallback((folderId: number | null) => {
+  const navigateToFolder = useCallback((folderId: number | null, systemFolderId?: number) => {
     const path = "/files"
+    
+    // Build query parameters
+    const params = new URLSearchParams()
+    
+    // Check if folderId is a system folder ID (1, 2, or 3)
+    if (folderId !== null && [1, 2, 3].includes(folderId)) {
+      params.set('system_folder_id', folderId.toString())
+    } else if (folderId !== null) {
+      // For regular folders, include both system_folder_id and folder_id
+      if (systemFolderId !== undefined) {
+        params.set('system_folder_id', systemFolderId.toString())
+      }
+      params.set('folder_id', folderId.toString())
+    }
+    
+    const queryString = params.toString()
+    const fullPath = queryString ? `${path}?${queryString}` : path
+    
     setNavigationHistory(prev => {
       // Remove any forward history if we're not at the end
       const newHistory = prev.slice(0, navigationHistoryIndex + 1)
       // Add the new route to history if it's different from current
-      if (newHistory[newHistory.length - 1] !== path) {
-        newHistory.push(path)
+      if (newHistory[newHistory.length - 1] !== fullPath) {
+        newHistory.push(fullPath)
         setNavigationHistoryIndex(newHistory.length - 1)
       }
       return newHistory
@@ -78,7 +96,7 @@ export function Layout({ children }: LayoutProps) {
     setSelectedFolderId(folderId)
     // Clear selection when navigating to a different folder
     setSelectedItems(new Set())
-    navigate(path)
+    navigate(fullPath)
   }, [navigationHistoryIndex, navigate, setSelectedItems])
   
   const navigateToRoute = useCallback((path: string) => {

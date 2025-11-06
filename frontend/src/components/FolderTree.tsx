@@ -303,7 +303,7 @@ interface FolderTreeProps {
 
 export function FolderTree({ onFolderSelect }: FolderTreeProps) {
   const { t } = useTranslation()
-  const { selectedFolderId, setSelectedFolderId, setSelectedFolderPath } = useLayout()
+  const { selectedFolderId, setSelectedFolderId, setSelectedFolderPath, navigateToFolder } = useLayout()
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
   const [moveDialogOpen, setMoveDialogOpen] = useState(false)
@@ -346,9 +346,36 @@ export function FolderTree({ onFolderSelect }: FolderTreeProps) {
     })
   }
 
-  const handleSelect = (folderId: number | null, path: string) => {
+  const handleSelect = async (folderId: number | null, path: string) => {
     setSelectedFolderId(folderId)
     setSelectedFolderPath(path)
+    
+    // Update URL when folder is selected
+    if (folderId !== null) {
+      // Check if it's a system folder ID (1, 2, or 3)
+      if ([1, 2, 3].includes(folderId)) {
+        navigateToFolder(folderId)
+      } else {
+        // For regular folders, fetch folder data to get systemFolderId
+        try {
+          const folderData = await folderApi.getFolder(folderId)
+          const systemFolderId = folderData.folder.systemFolderId
+          if (systemFolderId) {
+            navigateToFolder(folderId, systemFolderId)
+          } else {
+            // Fallback if systemFolderId is not available
+            navigateToFolder(folderId)
+          }
+        } catch (error) {
+          console.error('Failed to fetch folder data:', error)
+          // Navigate anyway with just folder_id
+          navigateToFolder(folderId)
+        }
+      }
+    } else {
+      navigateToFolder(null)
+    }
+    
     if (onFolderSelect && folderId !== null) {
       onFolderSelect(folderId, path)
     }

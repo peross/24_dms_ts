@@ -10,6 +10,7 @@ export interface Folder {
   userId: number;
   permissions: string;
   systemFolderType?: SystemFolderType;
+  systemFolderId?: number;
   createdAt: string;
   updatedAt: string;
   size?: number;

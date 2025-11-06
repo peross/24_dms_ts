@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
-import { useParams, useNavigate, useLocation } from "react-router-dom"
+import { useParams, useNavigate, useLocation, useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Loader2, ArrowLeft } from "lucide-react"
@@ -63,6 +63,7 @@ export function FileViewer() {
   const { fileId } = useParams<{ fileId: string }>()
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
   const { setSelectedFolderPath, setSelectedFolderId, setTextFileSaveHandler } = useLayout()
   const uploadNewVersionMutation = useUploadNewVersion()
   const [fileBlob, setFileBlob] = useState<Blob | null>(null)
@@ -104,28 +105,61 @@ export function FileViewer() {
     setFileContent(null)
     setError(null)
 
+    // Get folder context from URL params (re-read on each effect run)
+    const folderId = searchParams.get('folder_id')
+    const systemFolderId = searchParams.get('system_folder_id')
+    
     fileApi.getFile(Number.parseInt(fileId, 10))
       .then(async (response) => {
         // Only update state if we're still on the same fileId (check if route changed)
         if (location.pathname === `/files/view/${fileId}`) {
           setFile(response.file)
           
-          // If file has a folder, get the folder path and append file name
-          if (response.file.folderId) {
+          // Use folder from URL params if available, otherwise use file's folderId
+          const contextFolderId = folderId 
+            ? parseInt(folderId, 10) 
+            : (systemFolderId 
+              ? parseInt(systemFolderId, 10) 
+              : response.file.folderId)
+          
+          if (contextFolderId) {
+            // Check if it's a system folder ID
+            if ([1, 2, 3].includes(contextFolderId)) {
+              const systemFolderNames: Record<number, string> = {
+                1: 'General',
+                2: 'My Folders',
+                3: 'Shared With Me',
+              }
+              setSelectedFolderPath(`/ ${systemFolderNames[contextFolderId]} / ${response.file.name}`)
+              setSelectedFolderId(contextFolderId)
+            } else {
+              // It's a regular folder
+              try {
+                const folderData = await folderApi.getFolder(contextFolderId)
+                if (folderData.folder.path) {
+                  setSelectedFolderPath(`${folderData.folder.path} / ${response.file.name}`)
+                } else {
+                  setSelectedFolderPath(`/ ${folderData.folder.name} / ${response.file.name}`)
+                }
+                setSelectedFolderId(contextFolderId)
+              } catch (err) {
+                console.error('Failed to load folder info:', err)
+                setSelectedFolderPath(`/ ${response.file.name}`)
+                setSelectedFolderId(response.file.folderId || null)
+              }
+            }
+          } else if (response.file.folderId) {
+            // Fallback to file's folder
             try {
               const folderData = await folderApi.getFolder(response.file.folderId)
               if (folderData.folder.path) {
-                // Append file name to the path
                 setSelectedFolderPath(`${folderData.folder.path} / ${response.file.name}`)
-                setSelectedFolderId(response.file.folderId)
               } else {
-                // Fallback: show folder name and file name if path not available
                 setSelectedFolderPath(`/ ${folderData.folder.name} / ${response.file.name}`)
-                setSelectedFolderId(response.file.folderId)
               }
+              setSelectedFolderId(response.file.folderId)
             } catch (err) {
               console.error('Failed to load folder info:', err)
-              // If folder not found or error, show root with file name
               setSelectedFolderPath(`/ ${response.file.name}`)
               setSelectedFolderId(null)
             }
@@ -143,7 +177,7 @@ export function FileViewer() {
           setError(t('files.failedToLoadFile'))
         }
       })
-  }, [fileId, isValidRoute, t, setSelectedFolderPath, setSelectedFolderId, location.pathname])
+  }, [fileId, isValidRoute, t, setSelectedFolderPath, setSelectedFolderId, location.pathname, searchParams])
 
   const fileType = file ? getFileType(file.mimeType, file.name) : 'unsupported'
 
@@ -226,7 +260,7 @@ export function FileViewer() {
   // Register/unregister save handler based on file type
   useEffect(() => {
     if (fileType === 'txt' && fileContent !== null && fileId) {
-      setTextFileSaveHandler(() => handleSave)
+      setTextFileSaveHandler(() => handleSave())
     } else {
       setTextFileSaveHandler(null)
     }
@@ -238,7 +272,21 @@ export function FileViewer() {
   }, [fileType, fileContent, fileId, handleSave, setTextFileSaveHandler])
 
   const handleBack = () => {
-    navigate('/files')
+    // Navigate back to the folder context from URL params
+    const folderId = searchParams.get('folder_id')
+    const systemFolderId = searchParams.get('system_folder_id')
+    
+    const params = new URLSearchParams()
+    if (folderId) {
+      params.set('folder_id', folderId)
+    } else if (systemFolderId) {
+      params.set('system_folder_id', systemFolderId)
+    } else {
+      // Default to My Folders
+      params.set('system_folder_id', '2')
+    }
+    
+    navigate(`/files?${params.toString()}`)
   }
 
   // Return null if not on a valid file viewer route

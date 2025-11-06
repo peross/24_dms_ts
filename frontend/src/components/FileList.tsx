@@ -161,7 +161,22 @@ export function FileList({ viewMode }: FileListProps) {
       navigateToFolder(item.id)
     } else if (item.type === "file") {
       // Navigate to file viewer page and add to history
-      const filePath = `/files/view/${item.id}`
+      // Get current folder context for the file URL
+      const currentFolderId = selectedFolderId
+      let filePath = `/files/view/${item.id}`
+      
+      // Add folder context to URL if available
+      if (currentFolderId !== null) {
+        const params = new URLSearchParams()
+        // Check if it's a system folder ID
+        if ([1, 2, 3].includes(currentFolderId)) {
+          params.set('system_folder_id', currentFolderId.toString())
+        } else {
+          params.set('folder_id', currentFolderId.toString())
+        }
+        filePath += `?${params.toString()}`
+      }
+      
       navigateToRoute(filePath)
     }
   }

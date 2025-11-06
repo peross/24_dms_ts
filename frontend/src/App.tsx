@@ -45,6 +45,26 @@ function App() {
             }
           />
           <Route
+            path="/files/system/:systemFolderId"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Files />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/files/folder/:folderId"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Files />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/files/view/:fileId"
             element={
               <ProtectedRoute>
