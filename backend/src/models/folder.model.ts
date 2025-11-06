@@ -1,6 +1,7 @@
 import { DataTypes, Model, Optional } from 'sequelize';
 import { sequelize } from '../config/database';
 import User from './user.model';
+import SystemFolder from './system-folder.model';
 
 interface FolderAttributes {
   folderId: number;
@@ -9,6 +10,7 @@ interface FolderAttributes {
   parentId?: number;
   userId: number;
   permissions: string;
+  systemFolderId: number; // Which system folder this folder belongs to (General, My Folders, or Shared With Me)
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -22,6 +24,7 @@ export class Folder extends Model<FolderAttributes, FolderCreationAttributes> im
   public parentId?: number;
   public userId!: number;
   public permissions!: string;
+  public systemFolderId!: number;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 
@@ -29,6 +32,7 @@ export class Folder extends Model<FolderAttributes, FolderCreationAttributes> im
   public parent?: Folder;
   public children?: Folder[];
   public user?: User;
+  public systemFolder?: SystemFolder;
 }
 
 Folder.init(
@@ -73,6 +77,15 @@ Folder.init(
       defaultValue: '755',
       field: 'permissions',
     },
+    systemFolderId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      field: 'system_folder_id',
+      references: {
+        model: 'system_folders',
+        key: 'system_folder_id',
+      },
+    },
     createdAt: {
       type: DataTypes.DATE,
       field: 'created_at',
@@ -116,6 +129,20 @@ User.hasMany(Folder, {
   as: 'folders',
   onDelete: 'RESTRICT',
   onUpdate: 'CASCADE'
+});
+
+// SystemFolder association
+Folder.belongsTo(SystemFolder, {
+  foreignKey: 'system_folder_id',
+  as: 'systemFolder',
+  onDelete: 'RESTRICT',
+  onUpdate: 'CASCADE',
+});
+SystemFolder.hasMany(Folder, {
+  foreignKey: 'system_folder_id',
+  as: 'folders',
+  onDelete: 'RESTRICT',
+  onUpdate: 'CASCADE',
 });
 
 export default Folder;

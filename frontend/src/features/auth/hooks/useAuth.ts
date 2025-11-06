@@ -63,7 +63,7 @@ export function useAuth() {
             const loginResponse = response as LoginResponse;
             queryClient.setQueryData(AUTH_QUERY_KEY, loginResponse.user);
             queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEY });
-            navigate('/dashboard');
+            navigate('/');
             return response;
           },
         });
@@ -74,7 +74,7 @@ export function useAuth() {
     onSuccess: (response) => {
       queryClient.setQueryData(AUTH_QUERY_KEY, response.user);
       queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEY });
-      navigate('/dashboard');
+      navigate('/');
     },
   });
 

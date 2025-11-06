@@ -9,7 +9,7 @@ export function useProfile() {
 
   // Update profile mutation
   const updateProfileMutation = useMutation({
-    mutationFn: (data: { email?: string; firstName?: string; lastName?: string }) =>
+    mutationFn: (data: { email?: string; username?: string; firstName?: string; lastName?: string }) =>
       authApi.updateProfile(data),
     onSuccess: (response) => {
       // Update the cached user data

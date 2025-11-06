@@ -161,6 +161,9 @@ export function FileContextMenu({
       } as any)
     : children
 
+  // Check if item is a system folder
+  const isSystemFolder = item.type === "folder" && item.systemFolderType !== null && item.systemFolderType !== undefined
+
   return (
     <ContextMenu onOpenChange={handleContextMenuOpen}>
       <ContextMenuTrigger asChild>
@@ -172,53 +175,61 @@ export function FileContextMenu({
           {t('contextMenu.open')}
         </ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem onClick={handleCopy}>
-          <Copy className="w-4 h-4 mr-2" />
-          {t('contextMenu.copy')}
-        </ContextMenuItem>
-        <ContextMenuItem onClick={handleCut}>
-          <Scissors className="w-4 h-4 mr-2" />
-          {t('contextMenu.cut')}
-        </ContextMenuItem>
+        {!isSystemFolder && (
+          <>
+            <ContextMenuItem onClick={handleCopy}>
+              <Copy className="w-4 h-4 mr-2" />
+              {t('contextMenu.copy')}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={handleCut}>
+              <Scissors className="w-4 h-4 mr-2" />
+              {t('contextMenu.cut')}
+            </ContextMenuItem>
+          </>
+        )}
         {canPaste() && item.type === "folder" && (
           <ContextMenuItem onClick={handlePaste}>
             <Clipboard className="w-4 h-4 mr-2" />
             {t('contextMenu.paste')}
           </ContextMenuItem>
         )}
-        <ContextMenuSeparator />
-        <ContextMenuItem onClick={handleMove}>
-          <Move className="w-4 h-4 mr-2" />
-          {t('contextMenu.move')}
-        </ContextMenuItem>
-        {item.type === "file" && (
-          <ContextMenuItem onClick={handleDownload}>
-            <Download className="w-4 h-4 mr-2" />
-            {t('contextMenu.download')}
-          </ContextMenuItem>
+        {!isSystemFolder && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={handleMove}>
+              <Move className="w-4 h-4 mr-2" />
+              {t('contextMenu.move')}
+            </ContextMenuItem>
+            {item.type === "file" && (
+              <ContextMenuItem onClick={handleDownload}>
+                <Download className="w-4 h-4 mr-2" />
+                {t('contextMenu.download')}
+              </ContextMenuItem>
+            )}
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={handleRename}>
+              <Pencil className="w-4 h-4 mr-2" />
+              {t('contextMenu.rename')}
+            </ContextMenuItem>
+            {item.type === "file" && (
+              <ContextMenuItem onClick={handleUploadNewVersion}>
+                <Upload className="w-4 h-4 mr-2" />
+                {t('contextMenu.uploadNewVersion')}
+              </ContextMenuItem>
+            )}
+            {item.type === "file" && (
+              <ContextMenuItem onClick={handleVersionHistory}>
+                <History className="w-4 h-4 mr-2" />
+                {t('contextMenu.versionHistory')}
+              </ContextMenuItem>
+            )}
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={handleDelete} className="text-destructive focus:text-destructive">
+              <Trash2 className="w-4 h-4 mr-2" />
+              {t('contextMenu.delete')}
+            </ContextMenuItem>
+          </>
         )}
-        <ContextMenuSeparator />
-        <ContextMenuItem onClick={handleRename}>
-          <Pencil className="w-4 h-4 mr-2" />
-          {t('contextMenu.rename')}
-        </ContextMenuItem>
-        {item.type === "file" && (
-          <ContextMenuItem onClick={handleUploadNewVersion}>
-            <Upload className="w-4 h-4 mr-2" />
-            {t('contextMenu.uploadNewVersion')}
-          </ContextMenuItem>
-        )}
-        {item.type === "file" && (
-          <ContextMenuItem onClick={handleVersionHistory}>
-            <History className="w-4 h-4 mr-2" />
-            {t('contextMenu.versionHistory')}
-          </ContextMenuItem>
-        )}
-        <ContextMenuSeparator />
-        <ContextMenuItem onClick={handleDelete} className="text-destructive focus:text-destructive">
-          <Trash2 className="w-4 h-4 mr-2" />
-          {t('contextMenu.delete')}
-        </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   )

@@ -40,9 +40,10 @@ import { CreateFolderDialog } from "@/features/folders/components/CreateFolderDi
 import { UploadFileDialog } from "@/features/files/components/UploadFileDialog"
 import { useLayout } from "@/components/Layout"
 import { useClipboard } from "@/contexts/ClipboardContext"
-import { useUpdateFile } from "@/features/files/hooks/useFiles"
-import { useUpdateFolder } from "@/features/folders/hooks/useFolders"
-import { folderApi } from "@/lib/api/folder.api"
+import { useUpdateFile, useUploadFile } from "@/features/files/hooks/useFiles"
+import { useUpdateFolder, useFolderTree } from "@/features/folders/hooks/useFolders"
+import { folderApi, type FolderTreeNode } from "@/lib/api/folder.api"
+import { fileApi } from "@/lib/api/file.api"
 
 interface HeaderProps {
   readonly onMobileMenuClick?: () => void
@@ -70,7 +71,9 @@ export function Header({ onMobileMenuClick, viewMode, onViewModeChange }: Header
   const { clipboard, canPaste, clear: clearClipboard } = useClipboard()
   const updateFileMutation = useUpdateFile()
   const updateFolderMutation = useUpdateFolder()
+  const uploadFileMutation = useUploadFile()
   const queryClient = useQueryClient()
+  const { data: foldersData } = useFolderTree()
   const [profileModalOpen, setProfileModalOpen] = useState(false)
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false)
   const [uploadFileDialogOpen, setUploadFileDialogOpen] = useState(false)
@@ -97,16 +100,47 @@ export function Header({ onMobileMenuClick, viewMode, onViewModeChange }: Header
     try {
       // Process all clipboard items
       for (const item of clipboard) {
+        // Skip system folders - they cannot be copied or moved
+        if (item.type === "folder") {
+          // Check if this is a system folder by looking it up in the folder tree
+          const isSystemFolder = foldersData?.tree && findSystemFolderById(foldersData.tree, item.id)
+          if (isSystemFolder) {
+            console.warn(`Cannot ${item.action} system folder: ${item.name}`)
+            continue
+          }
+        }
+
         if (item.type === "file") {
-          await updateFileMutation.mutateAsync({
-            fileId: item.id,
-            data: { folderId: selectedFolderId },
-          })
+          if (item.action === "copy") {
+            // Copy: Download file and upload it again
+            try {
+              const blob = await fileApi.downloadFile(item.id)
+              const file = new File([blob], item.name, { type: blob.type })
+              await uploadFileMutation.mutateAsync({
+                files: [file],
+                folderId: selectedFolderId,
+              })
+            } catch (error) {
+              console.error(`Failed to copy file ${item.name}:`, error)
+            }
+          } else {
+            // Cut: Move file
+            await updateFileMutation.mutateAsync({
+              fileId: item.id,
+              data: { folderId: selectedFolderId },
+            })
+          }
         } else if (item.type === "folder") {
-          await updateFolderMutation.mutateAsync({
-            folderId: item.id,
-            data: { parentId: selectedFolderId },
-          })
+          if (item.action === "copy") {
+            // Copy: Create new folder and recursively copy contents
+            await copyFolderRecursively(item.id, item.name, selectedFolderId)
+          } else {
+            // Cut: Move folder
+            await updateFolderMutation.mutateAsync({
+              folderId: item.id,
+              data: { parentId: selectedFolderId },
+            })
+          }
         }
       }
 
@@ -117,6 +151,60 @@ export function Header({ onMobileMenuClick, viewMode, onViewModeChange }: Header
     } catch (error) {
       console.error("Paste failed:", error)
     }
+  }
+
+  // Helper function to recursively copy a folder and its contents
+  const copyFolderRecursively = async (sourceFolderId: number, folderName: string, targetParentId: number | null) => {
+    try {
+      // Create new folder
+      const newFolder = await folderApi.createFolder({
+        name: folderName,
+        parentId: targetParentId,
+      })
+
+      // Get files and subfolders in the source folder
+      const filesData = await fileApi.getFiles(sourceFolderId)
+      const foldersData = await folderApi.getFolderChildren(sourceFolderId)
+
+      // Copy all files
+      for (const file of filesData.files) {
+        try {
+          const blob = await fileApi.downloadFile(file.fileId)
+          const fileObj = new File([blob], file.name, { type: file.mimeType })
+          await uploadFileMutation.mutateAsync({
+            files: [fileObj],
+            folderId: newFolder.folder.folderId,
+            permissions: file.permissions,
+          })
+        } catch (error) {
+          console.error(`Failed to copy file ${file.name}:`, error)
+        }
+      }
+
+      // Recursively copy all subfolders
+      for (const subfolder of foldersData.folders) {
+        await copyFolderRecursively(subfolder.folderId, subfolder.name, newFolder.folder.folderId)
+      }
+    } catch (error) {
+      console.error(`Failed to copy folder ${folderName}:`, error)
+      throw error
+    }
+  }
+
+  /**
+   * Find folder by ID in folder tree to check if it's a system folder
+   */
+  const findSystemFolderById = (folders: FolderTreeNode[], folderId: number): boolean => {
+    for (const folder of folders) {
+      if (folder.folderId === folderId) {
+        return folder.systemFolderType !== null && folder.systemFolderType !== undefined
+      }
+      if (folder.children) {
+        const found = findSystemFolderById(folder.children, folderId)
+        if (found) return true
+      }
+    }
+    return false
   }
 
   const handleSaveTextFile = async () => {
@@ -326,7 +414,7 @@ export function Header({ onMobileMenuClick, viewMode, onViewModeChange }: Header
         {/* Navigation Controls */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <Button 
-            variant="ghost" 
+            variant="outline" 
             size="icon" 
             className="h-8 w-8 sm:h-10 sm:w-10" 
             title={t('header.main')}
@@ -335,7 +423,7 @@ export function Header({ onMobileMenuClick, viewMode, onViewModeChange }: Header
             <Home className="w-4 h-4 sm:w-5 sm:h-5" />
           </Button>
           <Button 
-            variant="ghost" 
+            variant="outline" 
             size="icon" 
             className="h-8 w-8 sm:h-10 sm:w-10" 
             title={t('header.back')}
@@ -345,7 +433,7 @@ export function Header({ onMobileMenuClick, viewMode, onViewModeChange }: Header
             <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
           </Button>
           <Button 
-            variant="ghost" 
+            variant="outline" 
             size="icon" 
             className="h-8 w-8 sm:h-10 sm:w-10" 
             title={t('header.forward')}
@@ -355,7 +443,7 @@ export function Header({ onMobileMenuClick, viewMode, onViewModeChange }: Header
             <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
           </Button>
           <Button 
-            variant="ghost" 
+            variant="outline" 
             size="icon" 
             className="h-8 w-8 sm:h-10 sm:w-10" 
             title={t('header.up')}
@@ -365,7 +453,7 @@ export function Header({ onMobileMenuClick, viewMode, onViewModeChange }: Header
             <ChevronUp className="w-4 h-4 sm:w-5 sm:h-5" />
           </Button>
           <Button 
-            variant="ghost" 
+            variant="outline" 
             size="icon" 
             className="h-8 w-8 sm:h-10 sm:w-10" 
             title={t('header.refresh')}
@@ -378,7 +466,7 @@ export function Header({ onMobileMenuClick, viewMode, onViewModeChange }: Header
         {/* Path Display */}
         <div className="flex-1 min-w-0">
           <Input
-            value={selectedFolderPath ? `Path: ${selectedFolderPath}` : "Path: /"}
+            value={selectedFolderPath ? `/${selectedFolderPath}` : "/"}
             readOnly
             className="bg-background w-full text-xs sm:text-sm"
           />

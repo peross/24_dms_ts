@@ -25,7 +25,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route
-            path="/dashboard"
+            path="/"
             element={
               <ProtectedRoute>
                 <Layout>
@@ -35,7 +35,7 @@ function App() {
             }
           />
           <Route
-            path="/dashboard/files"
+            path="/files"
             element={
               <ProtectedRoute>
                 <Layout>
@@ -45,7 +45,7 @@ function App() {
             }
           />
           <Route
-            path="/dashboard/files/view/:fileId"
+            path="/files/view/:fileId"
             element={
               <ProtectedRoute>
                 <Layout>
@@ -55,7 +55,7 @@ function App() {
             }
           />
           <Route
-            path="/dashboard/shared"
+            path="/shared"
             element={
               <ProtectedRoute>
                 <Layout>
@@ -65,7 +65,7 @@ function App() {
             }
           />
           <Route
-            path="/dashboard/recent"
+            path="/recent"
             element={
               <ProtectedRoute>
                 <Layout>
@@ -75,7 +75,7 @@ function App() {
             }
           />
           <Route
-            path="/dashboard/trash"
+            path="/trash"
             element={
               <ProtectedRoute>
                 <Layout>
@@ -85,7 +85,7 @@ function App() {
             }
           />
           <Route
-            path="/dashboard/settings"
+            path="/settings"
             element={
               <ProtectedRoute>
                 <Layout>
@@ -95,7 +95,7 @@ function App() {
             }
           />
           <Route
-            path="/dashboard/admin/users"
+            path="/admin/users"
             element={
               <ProtectedRoute>
                 <Layout>
@@ -105,7 +105,7 @@ function App() {
             }
           />
           <Route
-            path="/dashboard/admin/roles"
+            path="/admin/roles"
             element={
               <ProtectedRoute>
                 <Layout>
@@ -115,7 +115,7 @@ function App() {
             }
           />
           <Route
-            path="/dashboard/admin/user-roles"
+            path="/admin/user-roles"
             element={
               <ProtectedRoute>
                 <Layout>
@@ -124,8 +124,7 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </BrowserRouter>
       </ClipboardProvider>

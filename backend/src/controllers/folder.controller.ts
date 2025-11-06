@@ -1,6 +1,10 @@
 import { Response } from 'express';
 import FolderService from '../services/folder.service';
 import { AuthRequest } from '../middleware/auth.middleware';
+import UserService from '../services/user.service';
+import SystemFolderService from '../services/system-folder.service';
+import { SystemFolderType } from '../models/system-folder.model';
+import Folder from '../models/folder.model';
 
 export class FolderController {
   /**
@@ -13,17 +17,47 @@ export class FolderController {
         return;
       }
 
-      const { name, parentId } = req.body;
+      const { name, parentId, systemFolderId } = req.body;
 
       if (!name || typeof name !== 'string' || name.trim() === '') {
         res.status(400).json({ error: 'Folder name is required' });
         return;
       }
 
+      // Get user roles for permission checking
+      const userRoles = req.user.roles || await UserService.getUserRoles(req.user.userId);
+
+      // Determine systemFolderId:
+      // 1. If parentId is provided, inherit from parent
+      // 2. If systemFolderId is provided in request, use it
+      // 3. Otherwise, default to "My Folders"
+      let finalSystemFolderId: number;
+      
+      if (parentId) {
+        const parent = await Folder.findByPk(parentId);
+        if (!parent) {
+          res.status(404).json({ error: 'Parent folder not found' });
+          return;
+        }
+        finalSystemFolderId = parent.systemFolderId;
+      } else if (systemFolderId) {
+        finalSystemFolderId = systemFolderId;
+      } else {
+        // Default to "My Folders"
+        const myFoldersId = await SystemFolderService.getSystemFolderId(SystemFolderType.MY_FOLDERS);
+        if (!myFoldersId) {
+          res.status(500).json({ error: 'System folder configuration error' });
+          return;
+        }
+        finalSystemFolderId = myFoldersId;
+      }
+
       const folder = await FolderService.createFolder({
         name: name.trim(),
         parentId: parentId || undefined,
         userId: req.user.userId,
+        systemFolderId: finalSystemFolderId,
+        userRoles,
       });
 
       res.status(201).json({ folder });

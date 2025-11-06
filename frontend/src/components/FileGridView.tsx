@@ -1,6 +1,7 @@
 import { Folder, File } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { FileContextMenu } from "@/features/files/components/FileContextMenu"
+import type { SystemFolderType } from "@/lib/api/folder.api"
 
 export interface FileItem {
   id: number // fileId or folderId
@@ -10,6 +11,7 @@ export interface FileItem {
   permission: string
   size: string
   mimeType?: string // Only for files
+  systemFolderType?: SystemFolderType // Only for folders
 }
 
 interface FileGridViewProps {

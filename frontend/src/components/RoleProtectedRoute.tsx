@@ -22,7 +22,7 @@ export function RoleProtectedRoute({
   minRoleLevel,
   requireAdmin = false,
   requireSuperAdmin = false,
-  fallbackPath = '/dashboard',
+  fallbackPath = '/',
 }: RoleProtectedRouteProps) {
   const { user, isLoading } = useAuth()
   const { roles } = useRole()

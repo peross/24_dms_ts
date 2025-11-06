@@ -2,8 +2,9 @@ import { useState, useMemo } from "react"
 import { FileGridView } from "./FileGridView"
 import { FileListView } from "./FileListView"
 import { useLayout } from "@/components/Layout"
-import { useFiles, useUpdateFile, useDeleteFile } from "@/features/files/hooks/useFiles"
+import { useFiles, useUpdateFile, useDeleteFile, useUploadFile } from "@/features/files/hooks/useFiles"
 import { useFolderTree, useUpdateFolder, useDeleteFolder } from "@/features/folders/hooks/useFolders"
+import { folderApi } from "@/lib/api/folder.api"
 import { useClipboard } from "@/contexts/ClipboardContext"
 import { Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -54,6 +55,22 @@ function formatDate(dateString: string, locale: string = 'en'): string {
   
   // Default format for English and other locales
   return date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+/**
+ * Find folder by ID in folder tree to check if it's a system folder
+ */
+function findSystemFolderById(folders: FolderTreeNode[], folderId: number): boolean {
+  for (const folder of folders) {
+    if (folder.folderId === folderId) {
+      return folder.systemFolderType !== null && folder.systemFolderType !== undefined
+    }
+    if (folder.children) {
+      const found = findSystemFolderById(folder.children, folderId)
+      if (found) return true
+    }
+  }
+  return false
 }
 
 export function FileList({ viewMode }: FileListProps) {
@@ -115,6 +132,7 @@ export function FileList({ viewMode }: FileListProps) {
       lastModified: formatDate(folder.updatedAt, i18n.language),
       permission: "755",
       size: folder.size !== undefined ? formatFileSize(folder.size) : "-",
+      systemFolderType: folder.systemFolderType,
     }))
   }, [foldersData, selectedFolderId, i18n.language])
 
@@ -143,7 +161,7 @@ export function FileList({ viewMode }: FileListProps) {
       navigateToFolder(item.id)
     } else if (item.type === "file") {
       // Navigate to file viewer page and add to history
-      const filePath = `/dashboard/files/view/${item.id}`
+      const filePath = `/files/view/${item.id}`
       navigateToRoute(filePath)
     }
   }
@@ -154,12 +172,21 @@ export function FileList({ viewMode }: FileListProps) {
   }
 
   const handleCopy = (item: FileItem) => {
+    // Prevent copying system folders
+    if (item.type === "folder" && item.systemFolderType) {
+      return
+    }
+
     // Get selected items or use the clicked item
     const selectedItems = Array.from(selected).map(name => 
       allItems.find(item => item.name === name)
     ).filter((item): item is FileItem => item !== undefined)
     
-    const itemsToCopy = selectedItems.length > 0 ? selectedItems : [item]
+    // Filter out system folders from selected items
+    const itemsToCopy = (selectedItems.length > 0 ? selectedItems : [item])
+      .filter(item => !(item.type === "folder" && item.systemFolderType))
+    
+    if (itemsToCopy.length === 0) return
     
     copy(itemsToCopy.map(item => ({
       type: item.type,
@@ -177,20 +204,52 @@ export function FileList({ viewMode }: FileListProps) {
     if (targetFolderId === null) return
 
     const hasCut = clipboard.some(item => item.action === "cut")
+    const hasCopy = clipboard.some(item => item.action === "copy")
 
     try {
       // Process all clipboard items
       for (const item of clipboard) {
+        // Skip system folders - they cannot be copied or moved
+        if (item.type === "folder") {
+          // Check if this is a system folder by looking it up in the folder tree
+          const isSystemFolder = foldersData?.tree && findSystemFolderById(foldersData.tree, item.id)
+          if (isSystemFolder) {
+            console.warn(`Cannot ${item.action} system folder: ${item.name}`)
+            continue
+          }
+        }
+
         if (item.type === "file") {
-          await updateFileMutation.mutateAsync({
-            fileId: item.id,
-            data: { folderId: targetFolderId },
-          })
+          if (item.action === "copy") {
+            // Copy: Download file and upload it again
+            try {
+              const blob = await fileApi.downloadFile(item.id)
+              const file = new File([blob], item.name, { type: blob.type })
+              await uploadFileMutation.mutateAsync({
+                files: [file],
+                folderId: targetFolderId,
+              })
+            } catch (error) {
+              console.error(`Failed to copy file ${item.name}:`, error)
+            }
+          } else {
+            // Cut: Move file
+            await updateFileMutation.mutateAsync({
+              fileId: item.id,
+              data: { folderId: targetFolderId },
+            })
+          }
         } else if (item.type === "folder") {
-          await updateFolderMutation.mutateAsync({
-            folderId: item.id,
-            data: { parentId: targetFolderId },
-          })
+          if (item.action === "copy") {
+            // Copy: Create new folder and recursively copy contents
+            await copyFolderRecursively(item.id, item.name, targetFolderId)
+          } else {
+            // Cut: Move folder
+            await updateFolderMutation.mutateAsync({
+              folderId: item.id,
+              data: { parentId: targetFolderId },
+            })
+          }
         }
       }
 
@@ -203,13 +262,60 @@ export function FileList({ viewMode }: FileListProps) {
     }
   }
 
+  // Helper function to recursively copy a folder and its contents
+  const copyFolderRecursively = async (sourceFolderId: number, folderName: string, targetParentId: number | null) => {
+    try {
+      // Create new folder
+      const newFolder = await folderApi.createFolder({
+        name: folderName,
+        parentId: targetParentId,
+      })
+
+      // Get files and subfolders in the source folder
+      const filesData = await fileApi.getFiles(sourceFolderId)
+      const foldersData = await folderApi.getFolderChildren(sourceFolderId)
+
+      // Copy all files
+      for (const file of filesData.files) {
+        try {
+          const blob = await fileApi.downloadFile(file.fileId)
+          const fileObj = new File([blob], file.name, { type: file.mimeType })
+          await uploadFileMutation.mutateAsync({
+            files: [fileObj],
+            folderId: newFolder.folder.folderId,
+            permissions: file.permissions,
+          })
+        } catch (error) {
+          console.error(`Failed to copy file ${file.name}:`, error)
+        }
+      }
+
+      // Recursively copy all subfolders
+      for (const subfolder of foldersData.folders) {
+        await copyFolderRecursively(subfolder.folderId, subfolder.name, newFolder.folder.folderId)
+      }
+    } catch (error) {
+      console.error(`Failed to copy folder ${folderName}:`, error)
+      throw error
+    }
+  }
+
   const handleCut = (item: FileItem) => {
+    // Prevent cutting system folders
+    if (item.type === "folder" && item.systemFolderType) {
+      return
+    }
+
     // Get selected items or use the clicked item
     const selectedItems = Array.from(selected).map(name => 
       allItems.find(item => item.name === name)
     ).filter((item): item is FileItem => item !== undefined)
     
-    const itemsToCut = selectedItems.length > 0 ? selectedItems : [item]
+    // Filter out system folders from selected items
+    const itemsToCut = (selectedItems.length > 0 ? selectedItems : [item])
+      .filter(item => !(item.type === "folder" && item.systemFolderType))
+    
+    if (itemsToCut.length === 0) return
     
     cut(itemsToCut.map(item => ({
       type: item.type,
@@ -219,6 +325,10 @@ export function FileList({ viewMode }: FileListProps) {
   }
 
   const handleMove = (item: FileItem) => {
+    // Prevent moving system folders
+    if (item.type === "folder" && item.systemFolderType) {
+      return
+    }
     setCurrentItem(item)
     setMoveDialogOpen(true)
   }

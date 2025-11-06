@@ -4,6 +4,10 @@ import fs from 'fs/promises';
 import File from '../models/file.model';
 import FileVersion from '../models/file-version.model';
 import Folder from '../models/folder.model';
+import SystemFolder from '../models/system-folder.model';
+import SystemFolderService from './system-folder.service';
+import UserService from './user.service';
+import { isAdmin } from '../utils/role.util';
 
 export interface CreateFileDto {
   name: string;
@@ -13,12 +17,14 @@ export interface CreateFileDto {
   size: number;
   mimeType: string;
   permissions?: string;
+  userRoles?: string[];
 }
 
 export interface UpdateFileDto {
   name?: string;
   folderId?: number | null;
   permissions?: string;
+  userRoles?: string[];
 }
 
 export class FileService {
@@ -59,6 +65,27 @@ export class FileService {
       if (folder.userId !== data.userId) {
         throw new Error('Cannot upload file to another user\'s folder');
       }
+
+      // Enforce system folder rules
+      // Users can only upload files inside "My Folders"
+      const isMyFolders = await SystemFolderService.isMyFoldersOrDescendant(data.folderId, data.userId);
+      if (!isMyFolders) {
+        // Check if trying to upload to General folder
+        const isGeneral = await SystemFolderService.isGeneralOrDescendant(data.folderId, data.userId);
+        if (isGeneral) {
+          // Only admin and super_admin can upload to General
+          const userRoles = data.userRoles || await UserService.getUserRoles(data.userId);
+          if (!isAdmin(userRoles)) {
+            throw new Error('Only administrators can upload files to the General folder');
+          }
+        } else {
+          // Cannot upload to other system folders (e.g., Shared With Me)
+          throw new Error('Files can only be uploaded to "My Folders" or "General" (admin only)');
+        }
+      }
+    } else {
+      // Cannot upload root files - must be inside a system folder
+      throw new Error('Files must be uploaded to "My Folders" or "General" (admin only)');
     }
 
     // Check if file with same name already exists in the same folder
@@ -123,20 +150,37 @@ export class FileService {
 
   /**
    * Get file by ID
+   * Files in General folders are accessible to all users
    */
   async getFileById(fileId: number, userId: number): Promise<File | null> {
+    // First, get the file without userId filter to check if it's in General
     const file = await File.findOne({
       where: {
         fileId,
-        userId, // Ensure user owns the file
       },
       include: [
         {
           model: Folder,
           as: 'folder',
+          include: [{
+            model: SystemFolder,
+            as: 'systemFolder',
+          }],
         },
       ],
     });
+
+    if (!file) {
+      return null;
+    }
+
+    // Check if file is in General folder - if so, allow access to all users
+    const isGeneralFolder = file.folderId ? await SystemFolderService.isGeneralFolderOrDescendant(file.folderId) : false;
+    
+    // If not in General folder, check if user owns the file
+    if (!isGeneralFolder && file.userId !== userId) {
+      return null;
+    }
 
     return file;
   }
@@ -184,20 +228,56 @@ export class FileService {
   }
 
   /**
-   * Get files in a folder
+   * Get files in a folder or system folder
+   * If folderId is a system folder ID (virtual node), return files from all folders of that system folder type
+   * If folderId is an actual folder ID, return files in that folder
+   * Files in General folder are visible to all users
    */
   async getFilesInFolder(folderId: number | null, userId: number): Promise<File[]> {
-    const whereClause: any = {
-      userId,
-    };
+    let whereClause: any;
 
     if (folderId === null) {
-      whereClause[Op.or] = [
-        { folderId: null },
-        { folderId: { [Op.is]: null } },
-      ];
+      // Root level files - only user's files
+      whereClause = {
+        userId,
+        [Op.or]: [
+          { folderId: null },
+          { folderId: { [Op.is]: null } },
+        ],
+      };
     } else {
-      whereClause.folderId = folderId;
+      // Check if folderId is a system folder ID (virtual node)
+      const systemFolder = await SystemFolder.findByPk(folderId);
+      
+      if (systemFolder) {
+        // System folders are virtual nodes - they don't contain files directly
+        // Files only exist in actual folders, not in system folder containers
+        // Return empty array when selecting a system folder
+        return [];
+      } else {
+        // folderId is an actual folder ID
+        const folder = await Folder.findByPk(folderId, {
+          include: [{
+            model: SystemFolder,
+            as: 'systemFolder',
+          }],
+        });
+
+        if (!folder) {
+          return [];
+        }
+
+        // Check if folder is in General system folder
+        const isGeneralFolder = folder.systemFolderId === 1; // General
+        
+        if (isGeneralFolder) {
+          // Show all files in General folder, regardless of userId
+          whereClause = { folderId };
+        } else {
+          // Show only user's files
+          whereClause = { folderId, userId };
+        }
+      }
     }
 
     const files = await File.findAll({
@@ -241,7 +321,7 @@ export class FileService {
   /**
    * Update file metadata
    */
-  async updateFile(fileId: number, userId: number, data: UpdateFileDto): Promise<File> {
+  async updateFile(fileId: number, userId: number, data: UpdateFileDto, userRoles?: string[]): Promise<File> {
     const file = await File.findOne({
       where: {
         fileId,
@@ -263,6 +343,24 @@ export class FileService {
         if (folder.userId !== userId) {
           throw new Error('Cannot move file to another user\'s folder');
         }
+
+        // Enforce system folder rules for moving files
+        const roles = data.userRoles || userRoles || await UserService.getUserRoles(userId);
+        const isMyFolders = await SystemFolderService.isMyFoldersOrDescendant(data.folderId, userId);
+        if (!isMyFolders) {
+          const isGeneral = await SystemFolderService.isGeneralOrDescendant(data.folderId, userId);
+          if (isGeneral) {
+            // Only admin and super_admin can move to General
+            if (!isAdmin(roles)) {
+              throw new Error('Only administrators can move files to the General folder');
+            }
+          } else {
+            throw new Error('Files can only be moved to "My Folders" or "General" (admin only)');
+          }
+        }
+      } else {
+        // Cannot move to root - must be inside a system folder
+        throw new Error('Files must be inside "My Folders" or "General" (admin only)');
       }
     }
 
@@ -328,16 +426,24 @@ export class FileService {
 
   /**
    * Get file content for download
+   * Files in General folder are accessible to all users
    */
   async getFileContent(fileId: number, userId: number, version?: number): Promise<{ buffer: Buffer; mimeType: string; name: string }> {
     const file = await File.findOne({
       where: {
         fileId,
-        userId,
       },
     });
 
     if (!file) {
+      throw new Error('File not found or access denied');
+    }
+
+    // Check if file is in General folder - if so, allow access
+    const isGeneralFolder = file.folderId ? await SystemFolderService.isGeneralFolderOrDescendant(file.folderId) : false;
+    
+    // If not in General folder, check if user owns the file
+    if (!isGeneralFolder && file.userId !== userId) {
       throw new Error('File not found or access denied');
     }
 

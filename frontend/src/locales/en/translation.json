@@ -106,7 +106,23 @@
       "current": "Current",
       "unknownDevice": "Unknown Device",
       "loadingSessions": "Loading sessions...",
-      "noActiveSessions": "No active sessions"
+      "noActiveSessions": "No active sessions",
+      "loading2FAStatus": "Loading 2FA status...",
+      "manageSessions": "Manage your active login sessions across different devices.",
+      "password": "Password",
+      "passwordPlaceholder": "Enter your password",
+      "disable2FAFailed": "Failed to disable 2FA",
+      "revoke": "Revoke",
+      "ipAddress": "IP",
+      "unknown": "Unknown",
+      "lastActive": "Last active",
+      "mobileDevice": "Mobile Device",
+      "tablet": "Tablet",
+      "desktop": "Desktop",
+      "chrome": "Chrome",
+      "firefox": "Firefox",
+      "safari": "Safari",
+      "edge": "Edge"
     },
     "logout": "Logout",
     "viewProfile": "View Profile"
@@ -215,7 +231,35 @@
     "save": "Save",
     "fileSavedSuccessfully": "{{name}} saved successfully",
     "failedToSaveFile": "Failed to save file",
-    "fileNotFound": "File not found"
+    "fileNotFound": "File not found",
+    "errors": {
+      "FILE_UNAUTHORIZED": "Unauthorized access",
+      "FILE_NO_FILES_PROVIDED": "No files provided",
+      "FILE_FAILED_TO_UPLOAD_ANY": "Failed to upload any files",
+      "FILE_FOLDER_NOT_FOUND": "Folder not found",
+      "FILE_FAILED_TO_UPLOAD": "Failed to upload files",
+      "FILE_FAILED_TO_GET_FILES": "Failed to get files",
+      "FILE_INVALID_FILE_ID": "Invalid file ID",
+      "FILE_NOT_FOUND": "File not found",
+      "FILE_FAILED_TO_GET_FILE": "Failed to get file",
+      "FILE_NO_FILE_PROVIDED": "No file provided",
+      "FILE_ONLY_ONE_FILE_VERSION": "Only one file can be uploaded as a new version",
+      "FILE_INVALID_FILE_NAME": "Invalid file name",
+      "FILE_NOT_FOUND_OR_ACCESS_DENIED": "File not found or access denied",
+      "FILE_FAILED_TO_UPLOAD_NEW_VERSION": "Failed to upload new version",
+      "FILE_FAILED_TO_GET_VERSIONS": "Failed to get file versions",
+      "FILE_VERSION_NOT_FOUND": "File version not found",
+      "FILE_FAILED_TO_DOWNLOAD": "Failed to download file",
+      "FILE_NAME_EXISTS": "A file with this name already exists in this location",
+      "FILE_FAILED_TO_UPDATE": "Failed to update file",
+      "FILE_FAILED_TO_DELETE": "Failed to delete file",
+      "FILE_CANNOT_UPLOAD_TO_FOLDER": "Cannot upload file to another user's folder",
+      "FILE_CANNOT_UPLOAD_TO_GENERAL": "Only administrators can upload files to the General folder",
+      "FILE_FILES_ONLY_IN_MY_FOLDERS": "Files can only be uploaded to \"My Folders\" or \"General\" (admin only)",
+      "FILE_FILES_MUST_BE_IN_SYSTEM_FOLDER": "Files must be uploaded to \"My Folders\" or \"General\" (admin only)",
+      "FILE_CANNOT_MOVE_TO_GENERAL": "Only administrators can move files to the General folder",
+      "FILE_FILES_ONLY_MOVE_TO_MY_FOLDERS": "Files can only be moved to \"My Folders\" or \"General\" (admin only)"
+    }
   },
   "contextMenu": {
     "open": "Open",
@@ -227,7 +271,8 @@
     "rename": "Rename",
     "delete": "Delete",
     "uploadNewVersion": "Upload New Version",
-    "versionHistory": "Version History"
+    "versionHistory": "Version History",
+    "permissions": "Permissions"
   },
   "folders": {
     "title": "Folders",
@@ -242,7 +287,14 @@
     "create": "Create",
     "creating": "Creating...",
     "createError": "Failed to create folder",
-    "nameRequired": "Folder name is required"
+    "nameRequired": "Folder name is required",
+    "deleteFolder": "Delete Folder",
+    "deleteFolderDescription": "Are you sure you want to delete {{name}}? This action cannot be undone.",
+    "permissions": "Permissions",
+    "permissionsDescription": "Set permissions for {{name}}",
+    "permissionsHint": "Enter 3 digits (0-7) for owner, group, and others (e.g., 755)",
+    "invalidPermissions": "Invalid permissions format. Must be 3 digits (0-7).",
+    "permissionsError": "Failed to update permissions"
   },
   "protectedRoute": {
     "loading": "Loading..."

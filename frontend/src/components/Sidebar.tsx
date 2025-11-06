@@ -28,16 +28,16 @@ interface SidebarItem {
 
 // Base sidebar items available to all authenticated users
 const baseSidebarItems: SidebarItem[] = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard", translationKey: "sidebar.dashboard" },
-  { label: "Files", icon: Folder, path: "/dashboard/files", translationKey: "sidebar.files" },
-  { label: "Shared", icon: Users, path: "/dashboard/shared", translationKey: "sidebar.shared" },
-  { label: "Recent", icon: Clock, path: "/dashboard/recent", translationKey: "sidebar.recent" },
-  { label: "Trash", icon: Trash2, path: "/dashboard/trash", translationKey: "sidebar.trash" },
+  { label: "Dashboard", icon: LayoutDashboard, path: "/", translationKey: "sidebar.dashboard" },
+  { label: "Files", icon: Folder, path: "/files", translationKey: "sidebar.files" },
+  { label: "Shared", icon: Users, path: "/shared", translationKey: "sidebar.shared" },
+  { label: "Recent", icon: Clock, path: "/recent", translationKey: "sidebar.recent" },
+  { label: "Trash", icon: Trash2, path: "/trash", translationKey: "sidebar.trash" },
 ]
 
 // Admin-only sidebar items
 const adminSidebarItems: SidebarItem[] = [
-  { label: "Settings", icon: Settings, path: "/dashboard/settings", translationKey: "sidebar.settings", requireAdmin: true },
+  { label: "Settings", icon: Settings, path: "/settings", translationKey: "sidebar.settings", requireAdmin: true },
 ]
 
 // Super admin sidebar items with dropdown
@@ -48,9 +48,9 @@ const superAdminSidebarItems: SidebarItem[] = [
     translationKey: "sidebar.referenceTables",
     requireSuperAdmin: true,
     subItems: [
-      { label: "Users", path: "/dashboard/admin/users", translationKey: "sidebar.users" },
-      { label: "Roles", path: "/dashboard/admin/roles", translationKey: "sidebar.roles" },
-      { label: "User Roles", path: "/dashboard/admin/user-roles", translationKey: "sidebar.userRoles" },
+      { label: "Users", path: "/admin/users", translationKey: "sidebar.users" },
+      { label: "Roles", path: "/admin/roles", translationKey: "sidebar.roles" },
+      { label: "User Roles", path: "/admin/user-roles", translationKey: "sidebar.userRoles" },
     ],
   },
 ]
@@ -71,8 +71,8 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 
   // Check if a path is active (including nested routes)
   const isActive = (path: string) => {
-    if (path === "/dashboard") {
-      return location.pathname === "/dashboard" || location.pathname === "/"
+    if (path === "/") {
+      return location.pathname === "/"
     }
     return location.pathname.startsWith(path)
   }

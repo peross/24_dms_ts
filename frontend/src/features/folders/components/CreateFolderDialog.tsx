@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { FolderPlus, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -11,8 +11,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { useCreateFolder } from "@/features/folders/hooks/useFolders"
+import { useCreateFolder, useFolderTree } from "@/features/folders/hooks/useFolders"
 import { useLayout } from "@/components/Layout"
+import type { FolderTreeNode } from "@/lib/api/folder.api"
 
 interface CreateFolderDialogProps {
   open: boolean
@@ -20,20 +21,68 @@ interface CreateFolderDialogProps {
   parentId?: number | null
 }
 
+/**
+ * Find folder by system folder type in tree
+ */
+function findSystemFolder(folders: FolderTreeNode[], type: 'GENERAL' | 'MY_FOLDERS' | 'SHARED_WITH_ME'): FolderTreeNode | null {
+  for (const folder of folders) {
+    if (folder.systemFolderType === type) {
+      return folder
+    }
+    if (folder.children) {
+      const found = findSystemFolder(folder.children, type)
+      if (found) return found
+    }
+  }
+  return null
+}
+
 export function CreateFolderDialog({ open, onOpenChange, parentId }: CreateFolderDialogProps) {
   const { t } = useTranslation()
   const { selectedFolderId } = useLayout()
   const [folderName, setFolderName] = useState("")
   const [error, setError] = useState("")
+  const { data: folderTreeData } = useFolderTree()
 
-  // Use parentId prop if provided, otherwise use selected folder from context
-  const targetParentId = parentId !== undefined ? parentId : selectedFolderId
+  // Use parentId prop if provided, otherwise use selected folder from context, or default to "My Folders"
+  let targetParentId = parentId !== undefined ? parentId : selectedFolderId
+  
+  // If no parent is selected, default to "My Folders"
+  useEffect(() => {
+    if (targetParentId === null && folderTreeData?.tree) {
+      const myFoldersFolder = findSystemFolder(folderTreeData.tree, 'MY_FOLDERS')
+      if (myFoldersFolder) {
+        targetParentId = myFoldersFolder.folderId
+      }
+    }
+  }, [targetParentId, folderTreeData?.tree])
 
   const createMutation = useCreateFolder()
 
   const handleCreate = (name: string) => {
+    // Check if selectedFolderId is a system folder ID (1, 2, or 3)
+    // System folder IDs: 1 = General, 2 = My Folders, 3 = Shared With Me
+    const isSystemFolderId = targetParentId !== null && [1, 2, 3].includes(targetParentId)
+    
+    let finalParentId: number | null | undefined = targetParentId
+    let systemFolderId: number | undefined = undefined
+    
+    if (isSystemFolderId) {
+      // If it's a system folder ID, set parentId to null and pass systemFolderId
+      finalParentId = null
+      systemFolderId = targetParentId
+    } else if (finalParentId === null && folderTreeData?.tree) {
+      // If no parent is selected, default to "My Folders" (system folder ID: 2)
+      finalParentId = null
+      systemFolderId = 2
+    }
+
     createMutation.mutate(
-      { name, parentId: targetParentId || undefined },
+      { 
+        name, 
+        parentId: finalParentId === null ? null : (finalParentId || undefined),
+        systemFolderId: systemFolderId
+      },
       {
         onSuccess: () => {
           // Reset form and close dialog

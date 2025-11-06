@@ -1,5 +1,6 @@
 import { useState, useRef } from "react"
 import { useTranslation } from "react-i18next"
+import { translateError } from "@/lib/utils/error-translator"
 import { toast } from "sonner"
 import { Upload, Loader2, X, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -63,11 +64,12 @@ export function UploadNewVersionDialog({ open, onOpenChange, file }: UploadNewVe
           onOpenChange(false)
         },
         onError: (error: any) => {
+          const errorCode = error.response?.data?.errorCode
           const errorMessage = error.response?.data?.error || error.message || t('files.uploadError')
           if (error.response?.status === 413 || errorMessage.toLowerCase().includes('too large')) {
             setError(t('files.fileTooLarge'))
           } else {
-            setError(errorMessage)
+            setError(translateError(errorCode, errorMessage, t))
           }
         },
       }

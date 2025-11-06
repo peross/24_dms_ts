@@ -56,6 +56,9 @@ export class UserService {
       }
     }
 
+    // System folders are now conceptual only - no folder records are created for them
+    // Users will create folders and assign them to system folder types
+
     // Remove password from response
     const userJson = user.toJSON();
     delete (userJson as any).password;

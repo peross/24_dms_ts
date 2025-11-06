@@ -56,7 +56,7 @@ export function Layout({ children }: LayoutProps) {
   const [textFileSaveHandler, setTextFileSaveHandler] = useState<(() => Promise<void>) | null>(null)
   
   // Navigation history - track route paths
-  const [navigationHistory, setNavigationHistory] = useState<string[]>(["/dashboard/files"])
+  const [navigationHistory, setNavigationHistory] = useState<string[]>(["/files"])
   const [navigationHistoryIndex, setNavigationHistoryIndex] = useState<number>(0)
   
   const getTextFileSaveHandler = () => textFileSaveHandler
@@ -64,7 +64,7 @@ export function Layout({ children }: LayoutProps) {
   
   // Navigation functions
   const navigateToFolder = useCallback((folderId: number | null) => {
-    const path = "/dashboard/files"
+    const path = "/files"
     setNavigationHistory(prev => {
       // Remove any forward history if we're not at the end
       const newHistory = prev.slice(0, navigationHistoryIndex + 1)
@@ -141,8 +141,8 @@ export function Layout({ children }: LayoutProps) {
   }, [location.pathname])
 
   // Show full Header on Files page and File Viewer page, use minimal TopBar for other pages
-  const isFilesPage = location.pathname === "/dashboard/files"
-  const isFileViewerPage = location.pathname.startsWith("/dashboard/files/view/")
+  const isFilesPage = location.pathname === "/files"
+  const isFileViewerPage = location.pathname.startsWith("/files/view/")
 
   return (
     <LayoutContext.Provider value={{ 

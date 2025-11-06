@@ -1,5 +1,7 @@
 import apiClient from './client';
 
+export type SystemFolderType = 'GENERAL' | 'MY_FOLDERS' | 'SHARED_WITH_ME' | null;
+
 export interface Folder {
   folderId: number;
   name: string;
@@ -7,6 +9,7 @@ export interface Folder {
   parentId?: number | null;
   userId: number;
   permissions: string;
+  systemFolderType?: SystemFolderType;
   createdAt: string;
   updatedAt: string;
   size?: number;
@@ -14,25 +17,29 @@ export interface Folder {
 }
 
 export interface FolderTreeNode {
-  folderId: number;
+  folderId: number | null; // null for virtual system folder nodes
   name: string;
   path: string;
   parentId?: number | null;
   permissions: string;
+  systemFolderType?: SystemFolderType;
   createdAt: string;
   updatedAt?: string;
   size?: number;
   children?: FolderTreeNode[];
+  isSystemFolder?: boolean; // Flag to indicate this is a virtual system folder node
 }
 
 export interface CreateFolderData {
   name: string;
   parentId?: number | null;
+  systemFolderId?: number;
 }
 
 export interface UpdateFolderData {
   name?: string;
   parentId?: number | null;
+  permissions?: string;
 }
 
 export const folderApi = {

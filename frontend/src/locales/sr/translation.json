@@ -102,7 +102,23 @@
       "current": "Trenutno",
       "unknownDevice": "Nepoznat uređaj",
       "loadingSessions": "Učitavanje sesija...",
-      "noActiveSessions": "Nema aktivnih sesija"
+      "noActiveSessions": "Nema aktivnih sesija",
+      "loading2FAStatus": "Učitavanje statusa 2FA...",
+      "manageSessions": "Upravljajte svojim aktivnim sesijama za prijavu na različitim uređajima.",
+      "password": "Lozinka",
+      "passwordPlaceholder": "Unesite lozinku",
+      "disable2FAFailed": "Onemogućavanje 2FA neuspešno",
+      "revoke": "Opozovi",
+      "ipAddress": "IP",
+      "unknown": "Nepoznato",
+      "lastActive": "Poslednja aktivnost",
+      "mobileDevice": "Mobilni uređaj",
+      "tablet": "Tablet",
+      "desktop": "Desktop",
+      "chrome": "Chrome",
+      "firefox": "Firefox",
+      "safari": "Safari",
+      "edge": "Edge"
     },
     "logout": "Odjava",
     "viewProfile": "Pregled profila"
@@ -238,7 +254,35 @@
     "save": "Sačuvaj",
     "fileSavedSuccessfully": "{{name}} je uspešno sačuvan",
     "failedToSaveFile": "Čuvanje fajla neuspešno",
-    "fileNotFound": "Fajl nije pronađen"
+    "fileNotFound": "Fajl nije pronađen",
+    "errors": {
+      "FILE_UNAUTHORIZED": "Neovlašćen pristup",
+      "FILE_NO_FILES_PROVIDED": "Nisu navedeni fajlovi",
+      "FILE_FAILED_TO_UPLOAD_ANY": "Otpremanje fajlova neuspešno",
+      "FILE_FOLDER_NOT_FOUND": "Folder nije pronađen",
+      "FILE_FAILED_TO_UPLOAD": "Otpremanje fajlova neuspešno",
+      "FILE_FAILED_TO_GET_FILES": "Učitavanje fajlova neuspešno",
+      "FILE_INVALID_FILE_ID": "Nevažeći ID fajla",
+      "FILE_NOT_FOUND": "Fajl nije pronađen",
+      "FILE_FAILED_TO_GET_FILE": "Učitavanje fajla neuspešno",
+      "FILE_NO_FILE_PROVIDED": "Fajl nije naveden",
+      "FILE_ONLY_ONE_FILE_VERSION": "Samo jedan fajl može biti otpremljen kao nova verzija",
+      "FILE_INVALID_FILE_NAME": "Nevažeće ime fajla",
+      "FILE_NOT_FOUND_OR_ACCESS_DENIED": "Fajl nije pronađen ili je pristup odbijen",
+      "FILE_FAILED_TO_UPLOAD_NEW_VERSION": "Otpremanje nove verzije neuspešno",
+      "FILE_FAILED_TO_GET_VERSIONS": "Učitavanje verzija neuspešno",
+      "FILE_VERSION_NOT_FOUND": "Verzija fajla nije pronađena",
+      "FILE_FAILED_TO_DOWNLOAD": "Preuzimanje fajla neuspešno",
+      "FILE_NAME_EXISTS": "Fajl sa ovim imenom već postoji na ovoj lokaciji",
+      "FILE_FAILED_TO_UPDATE": "Ažuriranje fajla neuspešno",
+      "FILE_FAILED_TO_DELETE": "Brisanje fajla neuspešno",
+      "FILE_CANNOT_UPLOAD_TO_FOLDER": "Ne možete otpremiti fajl u folder drugog korisnika",
+      "FILE_CANNOT_UPLOAD_TO_GENERAL": "Samo administratori mogu otpremiti fajlove u General folder",
+      "FILE_FILES_ONLY_IN_MY_FOLDERS": "Fajlovi mogu biti otpremljeni samo u \"Moji Folderi\" ili \"General\" (samo admin)",
+      "FILE_FILES_MUST_BE_IN_SYSTEM_FOLDER": "Fajlovi moraju biti otpremljeni u \"Moji Folderi\" ili \"General\" (samo admin)",
+      "FILE_CANNOT_MOVE_TO_GENERAL": "Samo administratori mogu premestiti fajlove u General folder",
+      "FILE_FILES_ONLY_MOVE_TO_MY_FOLDERS": "Fajlovi mogu biti premešteni samo u \"Moji Folderi\" ili \"General\" (samo admin)"
+    }
   },
   "contextMenu": {
     "open": "Otvori",
@@ -250,7 +294,8 @@
     "rename": "Preimenuj",
     "delete": "Obriši",
     "uploadNewVersion": "Otpremi Novu Verziju",
-    "versionHistory": "Istorija Verzija"
+    "versionHistory": "Istorija Verzija",
+    "permissions": "Dozvole"
   },
   "folders": {
     "title": "Folderi",
@@ -265,7 +310,14 @@
     "create": "Kreiraj",
     "creating": "Kreiranje...",
     "createError": "Kreiranje foldera neuspešno",
-    "nameRequired": "Ime foldera je obavezno"
+    "nameRequired": "Ime foldera je obavezno",
+    "deleteFolder": "Obriši Folder",
+    "deleteFolderDescription": "Da li ste sigurni da želite da obrišete {{name}}? Ova akcija se ne može poništiti.",
+    "permissions": "Dozvole",
+    "permissionsDescription": "Postavite dozvole za {{name}}",
+    "permissionsHint": "Unesite 3 cifre (0-7) za vlasnika, grupu i ostale (npr. 755)",
+    "invalidPermissions": "Nevažeći format dozvola. Mora biti 3 cifre (0-7).",
+    "permissionsError": "Ažuriranje dozvola neuspešno"
   },
   "protectedRoute": {
     "loading": "Učitavanje..."

@@ -72,7 +72,7 @@ export function FileViewer() {
   const [file, setFile] = useState<{ fileId: number; name: string; mimeType: string; folderId?: number } | null>(null)
 
   // Check if we're on a valid file viewer route
-  const isValidRoute = fileId && location.pathname.startsWith('/dashboard/files/view/')
+  const isValidRoute = fileId && location.pathname.startsWith('/files/view/')
 
   // Cleanup state when fileId changes or component unmounts
   useEffect(() => {
@@ -107,7 +107,7 @@ export function FileViewer() {
     fileApi.getFile(Number.parseInt(fileId, 10))
       .then(async (response) => {
         // Only update state if we're still on the same fileId (check if route changed)
-        if (location.pathname === `/dashboard/files/view/${fileId}`) {
+        if (location.pathname === `/files/view/${fileId}`) {
           setFile(response.file)
           
           // If file has a folder, get the folder path and append file name
@@ -139,7 +139,7 @@ export function FileViewer() {
       .catch((err) => {
         console.error('Failed to load file info:', err)
         // Only set error if we're still on the same route
-        if (location.pathname === `/dashboard/files/view/${fileId}`) {
+        if (location.pathname === `/files/view/${fileId}`) {
           setError(t('files.failedToLoadFile'))
         }
       })
@@ -151,7 +151,7 @@ export function FileViewer() {
     if (!fileId || !file) return
 
     // Verify we're still on the correct route before loading
-    const currentPath = `/dashboard/files/view/${fileId}`
+    const currentPath = `/files/view/${fileId}`
     if (location.pathname !== currentPath) return
 
     setLoading(true)
@@ -238,7 +238,7 @@ export function FileViewer() {
   }, [fileType, fileContent, fileId, handleSave, setTextFileSaveHandler])
 
   const handleBack = () => {
-    navigate('/dashboard/files')
+    navigate('/files')
   }
 
   // Return null if not on a valid file viewer route

@@ -1,8 +1,12 @@
 import dotenv from 'dotenv';
-import { connectDatabase, sequelize } from '../config/database';
+import { connectDatabase } from '../config/database';
 import { addCurrentVersionToFiles } from './add-current-version-to-files';
 import { addFileVersionsTable } from './add-file-versions';
 import { fixUtf8Encoding } from './fix-utf8-encoding';
+import { addSystemFolderType } from './add-system-folder-type';
+import { refactorSystemFolders } from './refactor-system-folders';
+import { createUserSystemFolderTable } from './create-user-system-folder-table';
+import { refactorSystemFoldersSimple } from './refactor-system-folders-simple';
 
 dotenv.config();
 
@@ -21,6 +25,18 @@ async function runMigrations() {
     
     // Fix UTF-8 encoding for tables
     await fixUtf8Encoding();
+    
+    // Add system_folder_type column and initialize system folders
+    await addSystemFolderType();
+    
+    // Refactor system folders into separate table
+    await refactorSystemFolders();
+    
+    // Create user_system_folders junction table
+    await createUserSystemFolderTable();
+    
+    // Refactor to make system folders conceptual only (no folder records for system folders)
+    await refactorSystemFoldersSimple();
     
     console.log('\n✅ All migrations completed successfully!');
     process.exit(0);

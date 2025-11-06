@@ -6,10 +6,10 @@ export function Dashboard() {
   const { t } = useTranslation()
 
   const quickAccessItems = [
-    { icon: Folder, label: t("sidebar.files"), path: "/dashboard/files", description: t("dashboard.filesDescription") },
-    { icon: Users, label: t("sidebar.shared"), path: "/dashboard/shared", description: t("dashboard.sharedDescription") },
-    { icon: Clock, label: t("sidebar.recent"), path: "/dashboard/recent", description: t("dashboard.recentDescription") },
-    { icon: Trash2, label: t("sidebar.trash"), path: "/dashboard/trash", description: t("dashboard.trashDescription") },
+    { icon: Folder, label: t("sidebar.files"), path: "/files", description: t("dashboard.filesDescription") },
+    { icon: Users, label: t("sidebar.shared"), path: "/shared", description: t("dashboard.sharedDescription") },
+    { icon: Clock, label: t("sidebar.recent"), path: "/recent", description: t("dashboard.recentDescription") },
+    { icon: Trash2, label: t("sidebar.trash"), path: "/trash", description: t("dashboard.trashDescription") },
   ]
 
   return (

@@ -2,6 +2,44 @@ import { Response } from 'express';
 import multer from 'multer';
 import FileService from '../services/file.service';
 import { AuthRequest } from '../middleware/auth.middleware';
+import UserService from '../services/user.service';
+import { FileErrorCode } from '../utils/error-codes';
+
+/**
+ * Map error messages to error codes for translation
+ */
+function getErrorCode(errorMessage: string): string {
+  const errorMap: Record<string, string> = {
+    'Unauthorized': FileErrorCode.UNAUTHORIZED,
+    'No files provided': FileErrorCode.NO_FILES_PROVIDED,
+    'Failed to upload any files': FileErrorCode.FAILED_TO_UPLOAD_ANY,
+    'Folder not found': FileErrorCode.FOLDER_NOT_FOUND,
+    'Failed to upload files': FileErrorCode.FAILED_TO_UPLOAD,
+    'Failed to get files': FileErrorCode.FAILED_TO_GET_FILES,
+    'Invalid file ID': FileErrorCode.INVALID_FILE_ID,
+    'File not found': FileErrorCode.FILE_NOT_FOUND,
+    'Failed to get file': FileErrorCode.FAILED_TO_GET_FILE,
+    'No file provided': FileErrorCode.NO_FILE_PROVIDED,
+    'Only one file can be uploaded as a new version': FileErrorCode.ONLY_ONE_FILE_VERSION,
+    'Invalid file name': FileErrorCode.INVALID_FILE_NAME,
+    'File not found or access denied': FileErrorCode.FILE_NOT_FOUND_OR_ACCESS_DENIED,
+    'Failed to upload new version': FileErrorCode.FAILED_TO_UPLOAD_NEW_VERSION,
+    'Failed to get file versions': FileErrorCode.FAILED_TO_GET_VERSIONS,
+    'File version not found': FileErrorCode.FILE_VERSION_NOT_FOUND,
+    'Failed to download file': FileErrorCode.FAILED_TO_DOWNLOAD,
+    'File with this name already exists in this location': FileErrorCode.FILE_NAME_EXISTS,
+    'Failed to update file': FileErrorCode.FAILED_TO_UPDATE,
+    'Failed to delete file': FileErrorCode.FAILED_TO_DELETE,
+    'Cannot upload file to another user\'s folder': FileErrorCode.CANNOT_UPLOAD_TO_FOLDER,
+    'Only administrators can upload files to the General folder': FileErrorCode.CANNOT_UPLOAD_TO_GENERAL,
+    'Files can only be uploaded to "My Folders" or "General" (admin only)': FileErrorCode.FILES_ONLY_IN_MY_FOLDERS,
+    'Files must be uploaded to "My Folders" or "General" (admin only)': FileErrorCode.FILES_MUST_BE_IN_SYSTEM_FOLDER,
+    'Only administrators can move files to the General folder': FileErrorCode.CANNOT_MOVE_TO_GENERAL,
+    'Files can only be moved to "My Folders" or "General" (admin only)': FileErrorCode.FILES_ONLY_MOVE_TO_MY_FOLDERS,
+  };
+
+  return errorMap[errorMessage] || FileErrorCode.FAILED_TO_UPLOAD;
+}
 
 /**
  * Custom storage to preserve UTF-8 filename encoding
@@ -57,14 +95,14 @@ export class FileController {
   async uploadFile(req: AuthRequest, res: Response): Promise<void> {
     try {
       if (!req.user) {
-        res.status(401).json({ error: 'Unauthorized' });
+        res.status(401).json({ error: 'Unauthorized', errorCode: FileErrorCode.UNAUTHORIZED });
         return;
       }
 
       const files = req.files as Express.Multer.File[];
       
       if (!files || files.length === 0) {
-        res.status(400).json({ error: 'No files provided' });
+        res.status(400).json({ error: 'No files provided', errorCode: FileErrorCode.NO_FILES_PROVIDED });
         return;
       }
 
@@ -90,6 +128,9 @@ export class FileController {
         }
 
         try {
+          // Get user roles for permission checking
+          const userRoles = req.user.roles || await UserService.getUserRoles(req.user.userId);
+
           const uploadedFile = await FileService.uploadFile(
             {
               name: fileName.trim(),
@@ -99,6 +140,7 @@ export class FileController {
               size: file.size,
               mimeType: file.mimetype,
               permissions: permissions || '644',
+              userRoles,
             },
             file.buffer
           );
@@ -110,7 +152,10 @@ export class FileController {
       }
 
       if (uploadedFiles.length === 0) {
-        res.status(400).json({ error: 'Failed to upload any files' });
+        res.status(400).json({ 
+          error: 'Failed to upload any files',
+          errorCode: FileErrorCode.FAILED_TO_UPLOAD_ANY
+        });
         return;
       }
 
@@ -121,10 +166,11 @@ export class FileController {
         res.status(201).json({ files: uploadedFiles });
       }
     } catch (error: any) {
+      const errorCode = getErrorCode(error.message || 'Failed to upload files');
       if (error.message === 'Folder not found') {
-        res.status(404).json({ error: error.message });
+        res.status(404).json({ error: error.message, errorCode });
       } else {
-        res.status(400).json({ error: error.message || 'Failed to upload files' });
+        res.status(400).json({ error: error.message || 'Failed to upload files', errorCode });
       }
     }
   }
@@ -135,7 +181,7 @@ export class FileController {
   async getFiles(req: AuthRequest, res: Response): Promise<void> {
     try {
       if (!req.user) {
-        res.status(401).json({ error: 'Unauthorized' });
+        res.status(401).json({ error: 'Unauthorized', errorCode: FileErrorCode.UNAUTHORIZED });
         return;
       }
 
@@ -146,7 +192,8 @@ export class FileController {
 
       res.status(200).json({ files });
     } catch (error: any) {
-      res.status(500).json({ error: error.message || 'Failed to get files' });
+      const errorCode = getErrorCode(error.message || 'Failed to get files');
+      res.status(500).json({ error: error.message || 'Failed to get files', errorCode });
     }
   }
 
@@ -156,26 +203,27 @@ export class FileController {
   async getFile(req: AuthRequest, res: Response): Promise<void> {
     try {
       if (!req.user) {
-        res.status(401).json({ error: 'Unauthorized' });
+        res.status(401).json({ error: 'Unauthorized', errorCode: FileErrorCode.UNAUTHORIZED });
         return;
       }
 
       const fileId = parseInt(req.params.id, 10);
       if (isNaN(fileId)) {
-        res.status(400).json({ error: 'Invalid file ID' });
+        res.status(400).json({ error: 'Invalid file ID', errorCode: FileErrorCode.INVALID_FILE_ID });
         return;
       }
 
       const file = await FileService.getFileById(fileId, req.user.userId);
 
       if (!file) {
-        res.status(404).json({ error: 'File not found' });
+        res.status(404).json({ error: 'File not found', errorCode: FileErrorCode.FILE_NOT_FOUND });
         return;
       }
 
       res.status(200).json({ file });
     } catch (error: any) {
-      res.status(500).json({ error: error.message || 'Failed to get file' });
+      const errorCode = getErrorCode(error.message || 'Failed to get file');
+      res.status(500).json({ error: error.message || 'Failed to get file', errorCode });
     }
   }
 
@@ -185,26 +233,26 @@ export class FileController {
   async uploadNewVersion(req: AuthRequest, res: Response): Promise<void> {
     try {
       if (!req.user) {
-        res.status(401).json({ error: 'Unauthorized' });
+        res.status(401).json({ error: 'Unauthorized', errorCode: FileErrorCode.UNAUTHORIZED });
         return;
       }
 
       const fileId = parseInt(req.params.id, 10);
       if (isNaN(fileId)) {
-        res.status(400).json({ error: 'Invalid file ID' });
+        res.status(400).json({ error: 'Invalid file ID', errorCode: FileErrorCode.INVALID_FILE_ID });
         return;
       }
 
       const files = req.files as Express.Multer.File[];
       
       if (!files || files.length === 0 || !files[0]) {
-        res.status(400).json({ error: 'No file provided' });
+        res.status(400).json({ error: 'No file provided', errorCode: FileErrorCode.NO_FILE_PROVIDED });
         return;
       }
 
       // Only accept single file for version upload
       if (files.length > 1) {
-        res.status(400).json({ error: 'Only one file can be uploaded as a new version' });
+        res.status(400).json({ error: 'Only one file can be uploaded as a new version', errorCode: FileErrorCode.ONLY_ONE_FILE_VERSION });
         return;
       }
 
@@ -220,7 +268,7 @@ export class FileController {
       }
 
       if (!fileName || typeof fileName !== 'string' || fileName.trim() === '') {
-        res.status(400).json({ error: 'Invalid file name' });
+        res.status(400).json({ error: 'Invalid file name', errorCode: FileErrorCode.INVALID_FILE_NAME });
         return;
       }
 
@@ -234,10 +282,11 @@ export class FileController {
 
       res.status(200).json({ file: updatedFile });
     } catch (error: any) {
+      const errorCode = getErrorCode(error.message || 'Failed to upload new version');
       if (error.message === 'File not found or access denied') {
-        res.status(404).json({ error: error.message });
+        res.status(404).json({ error: error.message, errorCode });
       } else {
-        res.status(400).json({ error: error.message || 'Failed to upload new version' });
+        res.status(400).json({ error: error.message || 'Failed to upload new version', errorCode });
       }
     }
   }
@@ -248,13 +297,13 @@ export class FileController {
   async getFileVersions(req: AuthRequest, res: Response): Promise<void> {
     try {
       if (!req.user) {
-        res.status(401).json({ error: 'Unauthorized' });
+        res.status(401).json({ error: 'Unauthorized', errorCode: FileErrorCode.UNAUTHORIZED });
         return;
       }
 
       const fileId = parseInt(req.params.id, 10);
       if (isNaN(fileId)) {
-        res.status(400).json({ error: 'Invalid file ID' });
+        res.status(400).json({ error: 'Invalid file ID', errorCode: FileErrorCode.INVALID_FILE_ID });
         return;
       }
 
@@ -262,10 +311,11 @@ export class FileController {
 
       res.status(200).json({ versions });
     } catch (error: any) {
+      const errorCode = getErrorCode(error.message || 'Failed to get file versions');
       if (error.message === 'File not found or access denied') {
-        res.status(404).json({ error: error.message });
+        res.status(404).json({ error: error.message, errorCode });
       } else {
-        res.status(500).json({ error: error.message || 'Failed to get file versions' });
+        res.status(500).json({ error: error.message || 'Failed to get file versions', errorCode });
       }
     }
   }
@@ -276,13 +326,13 @@ export class FileController {
   async downloadFile(req: AuthRequest, res: Response): Promise<void> {
     try {
       if (!req.user) {
-        res.status(401).json({ error: 'Unauthorized' });
+        res.status(401).json({ error: 'Unauthorized', errorCode: FileErrorCode.UNAUTHORIZED });
         return;
       }
 
       const fileId = parseInt(req.params.id, 10);
       if (isNaN(fileId)) {
-        res.status(400).json({ error: 'Invalid file ID' });
+        res.status(400).json({ error: 'Invalid file ID', errorCode: FileErrorCode.INVALID_FILE_ID });
         return;
       }
 
@@ -294,10 +344,11 @@ export class FileController {
       res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
       res.send(buffer);
     } catch (error: any) {
+      const errorCode = getErrorCode(error.message || 'Failed to download file');
       if (error.message === 'File not found or access denied' || error.message === 'File version not found') {
-        res.status(404).json({ error: error.message });
+        res.status(404).json({ error: error.message, errorCode });
       } else {
-        res.status(500).json({ error: error.message || 'Failed to download file' });
+        res.status(500).json({ error: error.message || 'Failed to download file', errorCode });
       }
     }
   }
@@ -308,32 +359,41 @@ export class FileController {
   async updateFile(req: AuthRequest, res: Response): Promise<void> {
     try {
       if (!req.user) {
-        res.status(401).json({ error: 'Unauthorized' });
+        res.status(401).json({ error: 'Unauthorized', errorCode: FileErrorCode.UNAUTHORIZED });
         return;
       }
 
       const fileId = parseInt(req.params.id, 10);
       if (isNaN(fileId)) {
-        res.status(400).json({ error: 'Invalid file ID' });
+        res.status(400).json({ error: 'Invalid file ID', errorCode: FileErrorCode.INVALID_FILE_ID });
         return;
       }
 
       const { name, folderId, permissions } = req.body;
 
-      const file = await FileService.updateFile(fileId, req.user.userId, {
-        name,
-        folderId: folderId !== undefined ? (folderId === null ? null : parseInt(folderId, 10)) : undefined,
-        permissions,
-      });
+      // Get user roles for permission checking
+      const userRoles = req.user.roles || await UserService.getUserRoles(req.user.userId);
+
+      const file = await FileService.updateFile(
+        fileId,
+        req.user.userId,
+        {
+          name,
+          folderId: folderId !== undefined ? (folderId === null ? null : parseInt(folderId, 10)) : undefined,
+          permissions,
+        },
+        userRoles
+      );
 
       res.status(200).json({ file });
     } catch (error: any) {
+      const errorCode = getErrorCode(error.message || 'Failed to update file');
       if (error.message === 'File not found or access denied') {
-        res.status(404).json({ error: error.message });
+        res.status(404).json({ error: error.message, errorCode });
       } else if (error.message === 'File with this name already exists in this location' || error.message === 'Folder not found') {
-        res.status(409).json({ error: error.message });
+        res.status(409).json({ error: error.message, errorCode });
       } else {
-        res.status(400).json({ error: error.message || 'Failed to update file' });
+        res.status(400).json({ error: error.message || 'Failed to update file', errorCode });
       }
     }
   }
@@ -344,13 +404,13 @@ export class FileController {
   async deleteFile(req: AuthRequest, res: Response): Promise<void> {
     try {
       if (!req.user) {
-        res.status(401).json({ error: 'Unauthorized' });
+        res.status(401).json({ error: 'Unauthorized', errorCode: FileErrorCode.UNAUTHORIZED });
         return;
       }
 
       const fileId = parseInt(req.params.id, 10);
       if (isNaN(fileId)) {
-        res.status(400).json({ error: 'Invalid file ID' });
+        res.status(400).json({ error: 'Invalid file ID', errorCode: FileErrorCode.INVALID_FILE_ID });
         return;
       }
 
@@ -358,10 +418,11 @@ export class FileController {
 
       res.status(200).json({ message: 'File deleted successfully' });
     } catch (error: any) {
+      const errorCode = getErrorCode(error.message || 'Failed to delete file');
       if (error.message === 'File not found or access denied') {
-        res.status(404).json({ error: error.message });
+        res.status(404).json({ error: error.message, errorCode });
       } else {
-        res.status(500).json({ error: error.message || 'Failed to delete file' });
+        res.status(500).json({ error: error.message || 'Failed to delete file', errorCode });
       }
     }
   }

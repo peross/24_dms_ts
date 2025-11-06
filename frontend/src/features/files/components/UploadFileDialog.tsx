@@ -1,5 +1,6 @@
 import { useState, useRef } from "react"
 import { useTranslation } from "react-i18next"
+import { translateError } from "@/lib/utils/error-translator"
 import { useMutation } from "@tanstack/react-query"
 import { Upload, Loader2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -67,14 +68,16 @@ export function UploadFileDialog({ open, onOpenChange, folderId }: UploadFileDia
           onOpenChange(false)
         },
         onError: (error: any) => {
-          // Extract error message from response
+          // Extract error code and message from response
+          const errorCode = error.response?.data?.errorCode
           const errorMessage = error.response?.data?.error || error.message || t('files.uploadError')
           
           // Check if it's a file size error
           if (error.response?.status === 413 || errorMessage.toLowerCase().includes('too large')) {
             setError(t('files.fileTooLarge'))
           } else {
-            setError(errorMessage)
+            // Use translation utility if error code is available
+            setError(translateError(errorCode, errorMessage, t))
           }
         },
       }
