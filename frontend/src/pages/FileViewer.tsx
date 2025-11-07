@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useMemo, useRef, type ReactNode } from "react"
 import { useParams, useNavigate, useLocation, useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
+import { FolderTree } from "@/components/FolderTree"
 import { Loader2, ArrowLeft } from "lucide-react"
 import { fileApi } from "@/lib/api/file.api"
 import { PDFViewer } from "@/features/files/components/viewers/PDFViewer"
@@ -11,15 +12,13 @@ import { TextViewer } from "@/features/files/components/viewers/TextViewer"
 import { ImageViewer } from "@/features/files/components/viewers/ImageViewer"
 import { useLayout } from "@/components/Layout"
 import { folderApi } from "@/lib/api/folder.api"
-import { useUploadNewVersion } from "@/features/files/hooks/useFiles"
-import { toast } from "sonner"
-import { CheckCircle2 } from "lucide-react"
 
-function getFileType(mimeType?: string, fileName?: string): 'pdf' | 'excel' | 'word' | 'txt' | 'image' | 'unsupported' {
+function getFileType(mimeType?: string, fileName?: string): 'pdf' | 'excel' | 'word' | 'text' | 'image' | 'unsupported' {
   if (!mimeType && !fileName) return 'unsupported'
   
   const mime = mimeType?.toLowerCase() || ''
   const name = fileName?.toLowerCase() || ''
+  const extension = name.includes('.') ? name.split('.').pop() ?? '' : ''
   
   // PDF
   if (mime.includes('pdf') || name.endsWith('.pdf')) {
@@ -49,13 +48,203 @@ function getFileType(mimeType?: string, fileName?: string): 'pdf' | 'excel' | 'w
     return 'word'
   }
   
-  // Text
-  if (mime.includes('text/plain') || mime.includes('text/') ||
-      name.endsWith('.txt') || name.endsWith('.text')) {
-    return 'txt'
+  const textExtensions = new Set([
+    'txt','text','md','markdown','json','log','xml','html','htm','css','scss','less','js','jsx','ts','tsx','mjs','cjs','yml','yaml','ini','conf','config','env','sh','bash','zsh','fish','bat','cmd','ps1','sql','csv','tsv','svg','java','kt','kts','go','rs','rb','php','py','c','h','hpp','hh','cpp','cc','m','mm','swift'
+  ])
+
+  const textMimeIndicators = ['text/', 'json', 'xml', 'javascript', 'yaml', 'yml', 'csv', 'log', 'shell', 'x-sh', 'script']
+
+  const isTextLike =
+    mime === 'application/json' ||
+    mime === 'application/xml' ||
+    mime === 'application/x-yaml' ||
+    mime === 'application/javascript' ||
+    mime === 'application/x-sh' ||
+    mime === 'application/x-shellscript' ||
+    mime === 'application/csv' ||
+    textMimeIndicators.some((indicator) => mime.includes(indicator)) ||
+    textExtensions.has(extension)
+
+  if (isTextLike) {
+    return 'text'
   }
   
   return 'unsupported'
+}
+
+function getEditorLanguage(fileName?: string, mimeType?: string): string | undefined {
+  const name = fileName?.toLowerCase() || ''
+  const mime = mimeType?.toLowerCase() || ''
+  const extension = name.includes('.') ? name.split('.').pop() ?? '' : ''
+
+  const languageByExtension: Record<string, string> = {
+    js: 'javascript',
+    jsx: 'javascript',
+    mjs: 'javascript',
+    cjs: 'javascript',
+    ts: 'typescript',
+    tsx: 'typescript',
+    json: 'json',
+    md: 'markdown',
+    markdown: 'markdown',
+    css: 'css',
+    scss: 'scss',
+    less: 'less',
+    html: 'html',
+    htm: 'html',
+    xml: 'xml',
+    yml: 'yaml',
+    yaml: 'yaml',
+    ini: 'ini',
+    env: 'ini',
+    conf: 'ini',
+    config: 'ini',
+    sh: 'shell',
+    bash: 'shell',
+    zsh: 'shell',
+    fish: 'shell',
+    bat: 'bat',
+    cmd: 'bat',
+    ps1: 'powershell',
+    sql: 'sql',
+    csv: 'plaintext',
+    tsv: 'plaintext',
+    py: 'python',
+    php: 'php',
+    rb: 'ruby',
+    go: 'go',
+    rs: 'rust',
+    java: 'java',
+    kt: 'kotlin',
+    kts: 'kotlin',
+    swift: 'swift',
+    c: 'c',
+    h: 'c',
+    hh: 'c',
+    cpp: 'cpp',
+    cc: 'cpp',
+    hpp: 'cpp',
+    m: 'objective-c',
+    mm: 'objective-c',
+    lua: 'lua',
+    rsx: 'rust',
+    txt: 'plaintext',
+    text: 'plaintext',
+    log: 'plaintext',
+  }
+
+  if (languageByExtension[extension]) {
+    return languageByExtension[extension]
+  }
+
+  if (mime.includes('json')) return 'json'
+  if (mime.includes('xml')) return 'xml'
+  if (mime.includes('yaml') || mime.includes('yml')) return 'yaml'
+  if (mime.includes('javascript')) return 'javascript'
+  if (mime.includes('typescript')) return 'typescript'
+  if (mime.includes('markdown')) return 'markdown'
+  if (mime.includes('csv') || mime.includes('tsv')) return 'plaintext'
+  if (mime.includes('shell') || mime.includes('x-sh')) return 'shell'
+
+  return 'plaintext'
+}
+
+function resolveContextFolderId(file: { folderId?: number }, folderIdParam: string | null, systemFolderIdParam: string | null): number | undefined {
+  if (folderIdParam) {
+    return Number.parseInt(folderIdParam, 10)
+  }
+  if (systemFolderIdParam) {
+    return Number.parseInt(systemFolderIdParam, 10)
+  }
+  return file.folderId
+}
+
+function handleSystemFolder(
+  folderId: number,
+  fileName: string,
+  setSelectedFolderPath: (path: string) => void,
+  setSelectedFolderId: (folderId: number | null) => void,
+): boolean {
+  if (![1, 2, 3].includes(folderId)) {
+    return false
+  }
+
+  const systemFolderNames: Record<number, string> = {
+    1: 'General',
+    2: 'My Folders',
+    3: 'Shared With Me',
+  }
+  setSelectedFolderPath(`/ ${systemFolderNames[folderId]} / ${fileName}`)
+  setSelectedFolderId(folderId)
+  return true
+}
+
+async function handleRegularFolder(
+  folderId: number,
+  fileName: string,
+  fallbackFolderId: number | undefined,
+  setSelectedFolderPath: (path: string) => void,
+  setSelectedFolderId: (folderId: number | null) => void,
+): Promise<boolean> {
+  try {
+    const folderData = await folderApi.getFolder(folderId)
+    if (folderData.folder.path) {
+      setSelectedFolderPath(`${folderData.folder.path} / ${fileName}`)
+    } else {
+      setSelectedFolderPath(`/ ${folderData.folder.name} / ${fileName}`)
+    }
+    setSelectedFolderId(folderId)
+    return true
+  } catch (error) {
+    console.error('Failed to load folder info:', error)
+    if (fallbackFolderId) {
+      setSelectedFolderId(fallbackFolderId)
+    }
+    return false
+  }
+}
+
+async function applyFolderContext({
+  file,
+  folderIdParam,
+  systemFolderIdParam,
+  setSelectedFolderPath,
+  setSelectedFolderId,
+}: {
+  file: { name: string; folderId?: number }
+  folderIdParam: string | null
+  systemFolderIdParam: string | null
+  setSelectedFolderPath: (path: string) => void
+  setSelectedFolderId: (folderId: number | null) => void
+}) {
+  const resolvedId = resolveContextFolderId(file, folderIdParam, systemFolderIdParam)
+
+  if (resolvedId !== undefined) {
+    if (handleSystemFolder(resolvedId, file.name, setSelectedFolderPath, setSelectedFolderId)) {
+      return
+    }
+
+    const handled = await handleRegularFolder(resolvedId, file.name, file.folderId, setSelectedFolderPath, setSelectedFolderId)
+    if (handled) {
+      return
+    }
+  }
+
+  if (file.folderId && resolvedId !== file.folderId) {
+    const handled = await handleRegularFolder(file.folderId, file.name, file.folderId, setSelectedFolderPath, setSelectedFolderId)
+    if (handled) {
+      return
+    }
+  }
+
+  setSelectedFolderPath(`/ ${file.name}`)
+  setSelectedFolderId(null)
+}
+
+function parseFileIdParam(fileId: string | undefined): number | null {
+  if (!fileId) return null
+  const parsed = Number.parseInt(fileId, 10)
+  return Number.isNaN(parsed) ? null : parsed
 }
 
 export function FileViewer() {
@@ -63,14 +252,19 @@ export function FileViewer() {
   const { fileId } = useParams<{ fileId: string }>()
   const navigate = useNavigate()
   const location = useLocation()
+  const rawFileId = parseFileIdParam(fileId)
   const [searchParams] = useSearchParams()
-  const { setSelectedFolderPath, setSelectedFolderId, setTextFileSaveHandler } = useLayout()
-  const uploadNewVersionMutation = useUploadNewVersion()
+  const searchParamsString = searchParams.toString()
+  const { setSelectedFolderPath, setSelectedFolderId } = useLayout()
   const [fileBlob, setFileBlob] = useState<Blob | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fileContent, setFileContent] = useState<string | null>(null)
   const [file, setFile] = useState<{ fileId: number; name: string; mimeType: string; folderId?: number } | null>(null)
+  const [forceTextPreview, setForceTextPreview] = useState(false)
+  const [textPreviewLoading, setTextPreviewLoading] = useState(false)
+  const [textLoadError, setTextLoadError] = useState<string | null>(null)
+  const latestDownloadRef = useRef<number>(0)
 
   // Check if we're on a valid file viewer route
   const isValidRoute = fileId && location.pathname.startsWith('/files/view/')
@@ -84,192 +278,149 @@ export function FileViewer() {
       setFileContent(null)
       setError(null)
       setLoading(false)
-      setTextFileSaveHandler(null)
+      setForceTextPreview(false)
+      setTextPreviewLoading(false)
+      setTextLoadError(null)
     }
-  }, [fileId, setTextFileSaveHandler])
+  }, [fileId])
 
   // Fetch file info using API and update folder path
   useEffect(() => {
-    if (!fileId || !isValidRoute) {
-      // Clear state if not on valid route
+    if (rawFileId === null || !isValidRoute) {
       setFile(null)
       setFileBlob(null)
       setFileContent(null)
       setError(null)
+      setForceTextPreview(false)
+      setTextPreviewLoading(false)
+      setTextLoadError(null)
       return
     }
 
-    // Reset state when fileId changes
     setFile(null)
     setFileBlob(null)
     setFileContent(null)
-    setError(null)
 
-    // Get folder context from URL params (re-read on each effect run)
-    const folderId = searchParams.get('folder_id')
-    const systemFolderId = searchParams.get('system_folder_id')
-    
-    fileApi.getFile(Number.parseInt(fileId, 10))
+    const params = new URLSearchParams(searchParamsString)
+    const folderId = params.get('folder_id')
+    const systemFolderId = params.get('system_folder_id')
+
+    fileApi.getFile(rawFileId)
       .then(async (response) => {
-        // Only update state if we're still on the same fileId (check if route changed)
-        if (location.pathname === `/files/view/${fileId}`) {
-          setFile(response.file)
-          
-          // Use folder from URL params if available, otherwise use file's folderId
-          const contextFolderId = folderId 
-            ? parseInt(folderId, 10) 
-            : (systemFolderId 
-              ? parseInt(systemFolderId, 10) 
-              : response.file.folderId)
-          
-          if (contextFolderId) {
-            // Check if it's a system folder ID
-            if ([1, 2, 3].includes(contextFolderId)) {
-              const systemFolderNames: Record<number, string> = {
-                1: 'General',
-                2: 'My Folders',
-                3: 'Shared With Me',
-              }
-              setSelectedFolderPath(`/ ${systemFolderNames[contextFolderId]} / ${response.file.name}`)
-              setSelectedFolderId(contextFolderId)
-            } else {
-              // It's a regular folder
-              try {
-                const folderData = await folderApi.getFolder(contextFolderId)
-                if (folderData.folder.path) {
-                  setSelectedFolderPath(`${folderData.folder.path} / ${response.file.name}`)
-                } else {
-                  setSelectedFolderPath(`/ ${folderData.folder.name} / ${response.file.name}`)
-                }
-                setSelectedFolderId(contextFolderId)
-              } catch (err) {
-                console.error('Failed to load folder info:', err)
-                setSelectedFolderPath(`/ ${response.file.name}`)
-                setSelectedFolderId(response.file.folderId || null)
-              }
-            }
-          } else if (response.file.folderId) {
-            // Fallback to file's folder
-            try {
-              const folderData = await folderApi.getFolder(response.file.folderId)
-              if (folderData.folder.path) {
-                setSelectedFolderPath(`${folderData.folder.path} / ${response.file.name}`)
-              } else {
-                setSelectedFolderPath(`/ ${folderData.folder.name} / ${response.file.name}`)
-              }
-              setSelectedFolderId(response.file.folderId)
-            } catch (err) {
-              console.error('Failed to load folder info:', err)
-              setSelectedFolderPath(`/ ${response.file.name}`)
-              setSelectedFolderId(null)
-            }
-          } else {
-            // File is in root - show root with file name
-            setSelectedFolderPath(`/ ${response.file.name}`)
-            setSelectedFolderId(null)
-          }
+        if (!isValidRoute || response.file.fileId !== rawFileId) {
+          return
         }
+
+        setFile(response.file)
+
+        await applyFolderContext({
+          file: response.file,
+          folderIdParam: folderId,
+          systemFolderIdParam: systemFolderId,
+          setSelectedFolderPath,
+          setSelectedFolderId,
+        })
       })
       .catch((err) => {
         console.error('Failed to load file info:', err)
-        // Only set error if we're still on the same route
-        if (location.pathname === `/files/view/${fileId}`) {
+        if (isValidRoute) {
           setError(t('files.failedToLoadFile'))
         }
       })
-  }, [fileId, isValidRoute, t, setSelectedFolderPath, setSelectedFolderId, location.pathname, searchParams])
+  }, [rawFileId, isValidRoute, t, setSelectedFolderPath, setSelectedFolderId, searchParamsString])
 
   const fileType = file ? getFileType(file.mimeType, file.name) : 'unsupported'
+  const editorLanguage = useMemo(() => getEditorLanguage(file?.name, file?.mimeType), [file])
+  const isTextFile = fileType === 'text'
+  const canForceTextPreview = !isTextFile && Boolean(fileBlob)
+  const shouldLoadTextContent = isTextFile || forceTextPreview
 
   useEffect(() => {
-    if (!fileId || !file) return
+    if (rawFileId === null || !file) return
 
-    // Verify we're still on the correct route before loading
-    const currentPath = `/files/view/${fileId}`
+    const currentPath = `/files/view/${rawFileId}`
     if (location.pathname !== currentPath) return
 
+    const requestId = Date.now()
+    latestDownloadRef.current = requestId
     setLoading(true)
     setError(null)
     setFileBlob(null)
     setFileContent(null)
 
-    fileApi.downloadFile(Number.parseInt(fileId, 10))
+    fileApi.downloadFile(rawFileId)
       .then((blob) => {
-        // Only update state if we're still on the same route
-        if (location.pathname === currentPath) {
+        if (location.pathname === currentPath && requestId === latestDownloadRef.current) {
           setFileBlob(blob)
-          
-          // For text files, read content for editing
-          if (fileType === 'txt') {
-            blob.text().then(text => {
-              if (location.pathname === currentPath) {
-                setFileContent(text)
-              }
-            })
-          }
-          // For images, we don't need to read content - ImageViewer handles it
         }
       })
       .catch((err) => {
         console.error('Failed to load file:', err)
-        // Only set error if we're still on the same route
-        if (location.pathname === currentPath) {
+        if (location.pathname === currentPath && requestId === latestDownloadRef.current) {
           setError(t('files.failedToLoadFile'))
         }
       })
       .finally(() => {
-        // Only update loading state if we're still on the same route
-        if (location.pathname === currentPath) {
+        if (location.pathname === currentPath && requestId === latestDownloadRef.current) {
           setLoading(false)
         }
       })
-  }, [fileId, file, fileType, t, location.pathname])
 
-  // Save handler for text files
-  const handleSave = useCallback(async () => {
-    if (!file || fileType !== 'txt' || fileContent === null || !fileId) return
-
-    try {
-      // Extract plain text from content
-      const plainText = fileContent
-      
-      // Create a new file from the plain text content
-      const blob = new Blob([plainText], { type: 'text/plain' })
-      const fileObj = new File([blob], file.name, { type: 'text/plain' })
-      
-      // Upload as new version using the mutation hook
-      await uploadNewVersionMutation.mutateAsync({
-        fileId: Number.parseInt(fileId, 10),
-        file: fileObj,
-      })
-      
-      toast.success(t('files.fileSavedSuccessfully', { name: file.name }), {
-        icon: <CheckCircle2 className="w-5 h-5 text-green-500" />,
-      })
-      
-      // Refresh the file content
-      const newBlob = await fileApi.downloadFile(Number.parseInt(fileId, 10))
-      setFileBlob(newBlob)
-      newBlob.text().then(text => setFileContent(text))
-    } catch (err) {
-      console.error('Failed to save file:', err)
-      toast.error(t('files.failedToSaveFile'))
-    }
-  }, [file, fileType, fileContent, fileId, uploadNewVersionMutation, t])
-
-  // Register/unregister save handler based on file type
-  useEffect(() => {
-    if (fileType === 'txt' && fileContent !== null && fileId) {
-      setTextFileSaveHandler(() => handleSave())
-    } else {
-      setTextFileSaveHandler(null)
-    }
-    
-    // Cleanup on unmount
     return () => {
-      setTextFileSaveHandler(null)
+      if (latestDownloadRef.current === requestId) {
+        latestDownloadRef.current = 0
+      }
     }
-  }, [fileType, fileContent, fileId, handleSave, setTextFileSaveHandler])
+  }, [rawFileId, file, fileType, t, location.pathname])
+
+  useEffect(() => {
+    if (!fileBlob) {
+      if (!isTextFile) {
+        setFileContent(null)
+      }
+      setTextPreviewLoading(false)
+      return
+    }
+
+    if (!shouldLoadTextContent) {
+      if (!isTextFile) {
+        setFileContent(null)
+      }
+      setTextPreviewLoading(false)
+      setTextLoadError(null)
+      return
+    }
+
+    let disposed = false
+    const TEXT_WARNING_LIMIT = 5 * 1024 * 1024
+    const isLarge = fileBlob.size > TEXT_WARNING_LIMIT
+    setTextPreviewLoading(true)
+    setTextLoadError(isLarge ? t('files.textPreviewLargeWarning') : null)
+
+    fileBlob
+      .text()
+      .then((text) => {
+        if (disposed) return
+        setFileContent(text)
+        setTextPreviewLoading(false)
+      })
+      .catch((err) => {
+        if (disposed) return
+        console.error('Failed to load text preview:', err)
+        setTextPreviewLoading(false)
+        setTextLoadError(t('files.failedToLoadTextPreview'))
+      })
+
+    return () => {
+      disposed = true
+    }
+  }, [fileBlob, shouldLoadTextContent, isTextFile, t])
+
+  useEffect(() => {
+    if (isTextFile && forceTextPreview) {
+      setForceTextPreview(false)
+    }
+  }, [isTextFile, forceTextPreview])
 
   const handleBack = () => {
     // Navigate back to the folder context from URL params
@@ -308,47 +459,114 @@ export function FileViewer() {
     )
   }
 
+  const toolbarVisible = forceTextPreview || canForceTextPreview
+
+  let viewerNode: ReactNode = null
+
+  if (loading) {
+    viewerNode = (
+      <div className="flex h-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  } else if (error) {
+    viewerNode = (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-center">
+          <p className="text-sm text-destructive">{error}</p>
+          <Button onClick={handleBack} variant="outline" className="mt-4">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            {t('common.back')}
+          </Button>
+        </div>
+      </div>
+    )
+  } else if (shouldLoadTextContent) {
+    viewerNode = (
+      <div className="flex h-full flex-col">
+        {textLoadError && (
+          <div className="border-b border-border bg-amber-50 px-4 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-200">
+            {textLoadError}
+          </div>
+        )}
+        {textPreviewLoading || fileContent === null ? (
+          <div className="flex flex-1 items-center justify-center">
+            <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin" />
+              <span>{t('files.textPreviewLoading')}</span>
+            </div>
+          </div>
+        ) : (
+          <TextViewer
+            content={fileContent}
+            onChange={undefined}
+            language={editorLanguage}
+            readOnly
+          />
+        )}
+      </div>
+    )
+  } else if (fileType === 'pdf' && fileBlob) {
+    viewerNode = <PDFViewer file={fileBlob} />
+  } else if (fileType === 'image' && fileBlob) {
+    viewerNode = <ImageViewer file={fileBlob} fileName={file?.name} />
+  } else if (fileType === 'excel' && fileBlob) {
+    viewerNode = <ExcelViewer file={fileBlob} />
+  } else if (fileType === 'word' && fileBlob) {
+    viewerNode = <WordViewer file={fileBlob} />
+  } else if (fileType === 'unsupported') {
+    viewerNode = (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-center">
+          <p className="text-sm text-muted-foreground">{t('files.unsupportedFileType')}</p>
+          <Button onClick={handleBack} variant="outline" className="mt-4">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            {t('common.back')}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="h-full flex flex-col">
-      {/* Header is shown in Layout component - it displays the path with file name */}
-      
-      {/* Content */}
-      <div className="flex-1 overflow-hidden min-h-0">
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : error ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center">
-              <p className="text-sm text-destructive">{error}</p>
-              <Button onClick={handleBack} variant="outline" className="mt-4">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                {t('common.back')}
-              </Button>
+    <div className="flex h-full flex-col lg:flex-row overflow-hidden">
+      <div className="border-b border-border bg-muted/40 lg:h-full lg:w-72 lg:flex-shrink-0 lg:border-b-0 lg:border-r dark:bg-muted/20">
+        <div className="h-64 overflow-y-auto lg:h-full">
+          <FolderTree />
+        </div>
+      </div>
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-hidden">
+          {toolbarVisible && (
+            <div className="flex items-center justify-end gap-2 border-b border-border bg-muted/40 px-4 py-2">
+              {forceTextPreview ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setForceTextPreview(false)
+                    setTextLoadError(null)
+                  }}
+                >
+                  {t('files.exitTextPreview')}
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setTextLoadError(null)
+                    setForceTextPreview(true)
+                  }}
+                  disabled={!fileBlob || loading}
+                >
+                  {t('files.viewAsText')}
+                </Button>
+              )}
             </div>
-          </div>
-        ) : fileType === 'unsupported' ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center">
-              <p className="text-sm text-muted-foreground">{t('files.unsupportedFileType')}</p>
-              <Button onClick={handleBack} variant="outline" className="mt-4">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                {t('common.back')}
-              </Button>
-            </div>
-          </div>
-        ) : fileType === 'pdf' && fileBlob ? (
-          <PDFViewer file={fileBlob} />
-        ) : fileType === 'image' && fileBlob ? (
-          <ImageViewer file={fileBlob} fileName={file?.name} />
-        ) : fileType === 'excel' && fileBlob ? (
-          <ExcelViewer file={fileBlob} />
-        ) : fileType === 'word' && fileBlob ? (
-          <WordViewer file={fileBlob} />
-        ) : fileType === 'txt' && fileContent !== null ? (
-          <TextViewer content={fileContent} onChange={setFileContent} />
-        ) : null}
+          )}
+          {viewerNode}
+        </div>
       </div>
     </div>
   )

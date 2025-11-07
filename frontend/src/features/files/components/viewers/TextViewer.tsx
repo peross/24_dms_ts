@@ -1,31 +1,32 @@
 import { useEffect, useState } from "react"
-import { Textarea } from "@/components/ui/textarea"
+import { RichTextEditor } from "@/features/editor/components/RichTextEditor"
 
 interface TextViewerProps {
-  content: string
-  onChange: (content: string) => void
+  readonly content: string
+  readonly onChange?: (content: string) => void
+  readonly language?: string
+  readonly readOnly?: boolean
 }
 
-export function TextViewer({ content, onChange }: TextViewerProps) {
+export function TextViewer({ content, onChange, language, readOnly = false }: TextViewerProps) {
   const [editorContent, setEditorContent] = useState(content)
 
   useEffect(() => {
     setEditorContent(content)
   }, [content])
 
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value
+  const handleChange = (value: string) => {
     setEditorContent(value)
-    onChange(value)
+    onChange?.(value)
   }
 
   return (
-    <div className="flex flex-col h-full p-4">
-      <Textarea
+    <div className="flex h-full flex-col">
+      <RichTextEditor
         value={editorContent}
+        language={language}
         onChange={handleChange}
-        className="flex-1 font-mono text-sm resize-none"
-        placeholder="File content..."
+        readOnly={readOnly || !onChange}
       />
     </div>
   )

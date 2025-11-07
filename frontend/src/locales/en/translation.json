@@ -199,6 +199,7 @@
     "selectFile": "Select File",
     "selectFiles": "Select Files",
     "selectFileRequired": "Please select a file to upload",
+    "selectFolderToUpload": "Please choose a folder inside \"My Folders\" before uploading",
     "upload": "Upload",
     "uploading": "Uploading...",
     "uploadError": "Failed to upload file",
@@ -215,6 +216,11 @@
         "moveError": "Failed to move",
         "selectDestinationFolder": "Select destination folder",
     "confirmDelete": "Are you sure you want to delete {{name}}?",
+    "viewAsText": "Open as text",
+    "exitTextPreview": "Exit text preview",
+    "textPreviewLoading": "Preparing text preview...",
+    "textPreviewLargeWarning": "Large files may take a moment to load in text preview.",
+    "failedToLoadTextPreview": "We couldn't load a text preview for this file.",
     "uploadNewVersion": "Upload New Version",
     "uploadNewVersionDescription": "Upload a new version of {{name}}",
     "rightClickToPaste": "Right-click to paste",
@@ -298,6 +304,90 @@
   },
   "protectedRoute": {
     "loading": "Loading..."
+  },
+  "admin": {
+    "users": {
+      "description": "Manage system users",
+      "addUser": "Add user",
+      "addUserDescription": "Create a new user and assign roles.",
+      "editUser": "Edit user",
+      "editUserDescription": "Update user details and role assignments.",
+      "searchPlaceholder": "Search by name, email, username or role...",
+      "totalUsers": "Total users: {{count}}",
+      "refreshing": "Refreshing...",
+      "noResultsTitle": "No users found",
+      "noResultsDescription": "Try adjusting your search or filters.",
+      "unknownName": "No name",
+      "loadingRoles": "Loading roles...",
+      "noRolesDefined": "No roles have been defined yet.",
+      "create": "Create user",
+      "update": "Save changes",
+      "saving": "Creating...",
+      "updating": "Saving...",
+      "deleteUser": "Delete user",
+      "deleteUserDescription": "Are you sure you want to delete {{email}}? This action cannot be undone.",
+      "deleting": "Deleting...",
+      "columns": {
+        "name": "Name",
+        "email": "Email",
+        "username": "Username",
+        "roles": "Roles",
+        "createdAt": "Created"
+      },
+      "form": {
+        "email": "Email",
+        "username": "Username",
+        "firstName": "First name",
+        "lastName": "Last name",
+        "password": "Password",
+        "passwordOptional": "Leave blank to keep current password",
+        "passwordPlaceholder": "Leave blank to keep current password",
+        "roles": "Roles",
+        "rolesHint": "Select at least one role. Users must have member role or higher.",
+        "optional": "(optional)"
+      },
+      "notifications": {
+        "userCreated": "User {{email}} created successfully.",
+        "userUpdated": "User {{email}} updated successfully.",
+        "userDeleted": "User {{email}} deleted successfully."
+      },
+      "errors": {
+        "emailRequired": "Email is required.",
+        "passwordRequired": "Password is required.",
+        "generic": "Something went wrong.",
+        "failedToLoad": "Failed to load users."
+      },
+      "filters": {
+        "roleLabel": "Role",
+        "roleAll": "All roles",
+        "createdLabel": "Created",
+        "createdAny": "Any time",
+        "created7": "Last 7 days",
+        "created30": "Last 30 days",
+        "created90": "Last 90 days",
+        "reset": "Reset filters",
+        "searchLabel": "Search"
+      },
+      "columnsMenu": {
+        "trigger": "Columns",
+        "showAll": "Show all columns"
+      },
+      "filteredSummary": "Showing {{count}} of {{total}} users"
+    }
+  },
+  "roles": {
+    "member": {
+      "name": "Member",
+      "description": "Regular member with basic access"
+    },
+    "admin": {
+      "name": "Administrator",
+      "description": "Administrator with elevated access"
+    },
+    "super_admin": {
+      "name": "Super Administrator",
+      "description": "Super administrator with full system access"
+    }
   }
 }
 

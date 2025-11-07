@@ -222,6 +222,7 @@
     "selectFile": "Izaberi Fajl",
     "selectFiles": "Izaberi Fajlove",
     "selectFileRequired": "Molimo izaberite fajl za otpremanje",
+    "selectFolderToUpload": "Odaberite folder unutar \"Moji Folderi\" pre otpremanja",
     "upload": "Otpremi",
     "uploading": "Otpremanje...",
     "uploadError": "Otpremanje fajla neuspešno",
@@ -238,6 +239,11 @@
         "moveError": "Premeštanje neuspešno",
         "selectDestinationFolder": "Izaberite odredišni folder",
     "confirmDelete": "Da li ste sigurni da želite da obrišete {{name}}?",
+    "viewAsText": "Otvori kao tekst",
+    "exitTextPreview": "Zatvori prikaz u tekst editoru",
+    "textPreviewLoading": "Priprema prikaza u tekst editoru...",
+    "textPreviewLargeWarning": "Veći fajlovi mogu se duže učitavati u tekst editoru.",
+    "failedToLoadTextPreview": "Tekstualni prikaz za ovaj fajl nije moguće učitati.",
     "uploadNewVersion": "Otpremi Novu Verziju",
     "uploadNewVersionDescription": "Otpremite novu verziju {{name}}",
     "rightClickToPaste": "Desni klik za lepljenje",
@@ -321,6 +327,90 @@
   },
   "protectedRoute": {
     "loading": "Učitavanje..."
+  },
+  "admin": {
+    "users": {
+      "description": "Upravljajte korisnicima sistema",
+      "addUser": "Dodaj korisnika",
+      "addUserDescription": "Kreirajte novi korisnički nalog i dodelite uloge.",
+      "editUser": "Izmeni korisnika",
+      "editUserDescription": "Ažurirajte podatke korisnika i dodeljene uloge.",
+      "searchPlaceholder": "Pretražite po imenu, email adresi, korisničkom imenu ili ulozi...",
+      "totalUsers": "Ukupno korisnika: {{count}}",
+      "refreshing": "Osvežavanje...",
+      "noResultsTitle": "Nema pronađenih korisnika",
+      "noResultsDescription": "Pokušajte da prilagodite pretragu ili filtere.",
+      "unknownName": "Bez imena",
+      "loadingRoles": "Učitavanje uloga...",
+      "noRolesDefined": "Još uvek nisu definisane uloge.",
+      "create": "Kreiraj korisnika",
+      "update": "Sačuvaj izmene",
+      "saving": "Kreiranje...",
+      "updating": "Čuvanje...",
+      "deleteUser": "Obriši korisnika",
+      "deleteUserDescription": "Da li ste sigurni da želite da obrišete {{email}}? Ova akcija se ne može poništiti.",
+      "deleting": "Brisanje...",
+      "columns": {
+        "name": "Ime",
+        "email": "Email",
+        "username": "Korisničko ime",
+        "roles": "Uloge",
+        "createdAt": "Kreiran"
+      },
+      "form": {
+        "email": "Email",
+        "username": "Korisničko ime",
+        "firstName": "Ime",
+        "lastName": "Prezime",
+        "password": "Lozinka",
+        "passwordOptional": "Ostavite prazno da zadržite postojeću lozinku",
+        "passwordPlaceholder": "Ostavite prazno da zadržite postojeću lozinku",
+        "roles": "Uloge",
+        "rolesHint": "Izaberite bar jednu ulogu. Korisnik mora imati član ulogu ili višu.",
+        "optional": "(opciono)"
+      },
+      "notifications": {
+        "userCreated": "Korisnik {{email}} je uspešno kreiran.",
+        "userUpdated": "Korisnik {{email}} je uspešno ažuriran.",
+        "userDeleted": "Korisnik {{email}} je uspešno obrisan."
+      },
+      "errors": {
+        "emailRequired": "Email je obavezan.",
+        "passwordRequired": "Lozinka je obavezna.",
+        "generic": "Došlo je do greške.",
+        "failedToLoad": "Učitavanje korisnika neuspešno."
+      },
+      "filters": {
+        "roleLabel": "Uloga",
+        "roleAll": "Sve uloge",
+        "createdLabel": "Kreiran",
+        "createdAny": "Bilo kada",
+        "created7": "Poslednjih 7 dana",
+        "created30": "Poslednjih 30 dana",
+        "created90": "Poslednjih 90 dana",
+        "reset": "Resetuj filtere",
+        "searchLabel": "Pretraga"
+      },
+      "columnsMenu": {
+        "trigger": "Kolone",
+        "showAll": "Prikaži sve kolone"
+      },
+      "filteredSummary": "Prikazano {{count}} od {{total}} korisnika"
+    }
+  },
+  "roles": {
+    "member": {
+      "name": "Član",
+      "description": "Član sa osnovnim ovlašćenjima"
+    },
+    "admin": {
+      "name": "Administrator",
+      "description": "Administrator sa proširenim ovlašćenjima"
+    },
+    "super_admin": {
+      "name": "Super administrator",
+      "description": "Super administrator sa punim pristupom sistemu"
+    }
   }
 }
 

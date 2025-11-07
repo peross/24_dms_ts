@@ -139,11 +139,37 @@ export class SystemFolderService {
    * Check if a folder is a system folder (deprecated - folders are now just assigned to system folder types)
    */
   async isSystemFolder(folderId: number): Promise<boolean> {
-    // This method is kept for backward compatibility
-    // In the new structure, all folders have a systemFolderId, so this always returns true
-    // But we can check if it's a root-level folder (no parent) which might be considered a "system folder" in the UI
-    const folder = await Folder.findByPk(folderId);
-    return folder !== null;
+    const folder = await Folder.findByPk(folderId, {
+      include: [{
+        model: SystemFolder,
+        as: 'systemFolder',
+      }],
+    });
+
+    if (!folder) {
+      return false;
+    }
+
+    return folder.parentId === null && folder.systemFolderId !== null;
+  }
+
+  async isSystemFolderRoot(folderId: number): Promise<boolean> {
+    const folder = await Folder.findByPk(folderId)
+    if (!folder) {
+      return false
+    }
+
+    if (!folder.systemFolderId || folder.parentId) {
+      return false
+    }
+
+    const systemFolder = await SystemFolder.findByPk(folder.systemFolderId)
+    if (!systemFolder) {
+      return false
+    }
+
+    const rootSystemFolderNames = new Set(['General', 'My Folders', 'Shared With Me'])
+    return rootSystemFolderNames.has(systemFolder.name) && folder.name === systemFolder.name
   }
 }
 

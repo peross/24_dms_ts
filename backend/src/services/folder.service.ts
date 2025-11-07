@@ -484,14 +484,14 @@ export class FolderService {
       throw new Error('Folder not found');
     }
 
-    // Ensure folder belongs to user
-    if (folder.userId !== userId) {
+    // Ensure folder belongs to user unless it's a system root folder
+    const isSystemRoot = await SystemFolderService.isSystemFolderRoot(folderId)
+    if (!isSystemRoot && folder.userId !== userId) {
       throw new Error('Access denied');
     }
 
-    // Prevent deleting system folders
-    const isSystemFolder = await SystemFolderService.isSystemFolder(folderId);
-    if (isSystemFolder) {
+    // Prevent deleting root system folders
+    if (isSystemRoot) {
       throw new Error('Cannot delete system folders');
     }
 

@@ -1,0 +1,139 @@
+import { dialog, ipcMain, shell } from 'electron';
+import { configStore } from './config-store';
+import { ensureWorkspaceStructure } from './workspace-manager';
+import { startFileWatcher, stopFileWatcher } from './file-watcher';
+import { authService } from './services/auth-service';
+import { normalizePath } from './utils/path';
+import { workspaceSyncService } from './services/workspace-sync-service';
+import { deriveWebAppUrl } from './utils/url';
+
+function isSyncReady(): boolean {
+  return Boolean(configStore.getWorkspacePath() && configStore.getAuthState()?.accessToken);
+}
+
+async function restartWatcherIfReady(): Promise<void> {
+  if (!isSyncReady()) {
+    await stopFileWatcher();
+    return;
+  }
+
+  const workspacePath = configStore.getWorkspacePath();
+  if (workspacePath) {
+    await startFileWatcher(workspacePath);
+  }
+}
+
+export function registerIpcHandlers(): void {
+  ipcMain.handle('app:get-config', async () => {
+    const authState = configStore.getAuthState();
+    return {
+      workspacePath: configStore.getWorkspacePath(),
+      apiBaseUrl: configStore.getApiBaseUrl(),
+      auth: authState
+        ? {
+            email: authState.email,
+            displayName: authState.displayName,
+            isAuthenticated: Boolean(authState.accessToken),
+          }
+        : undefined,
+      syncActive: isSyncReady(),
+      lastSyncedAt: workspaceSyncService.getLastSyncedAt()?.toISOString() ?? null,
+    };
+  });
+
+  ipcMain.handle('app:set-api-base-url', async (_event, apiBaseUrl: string) => {
+    authService.setApiBaseUrl(apiBaseUrl);
+    return { apiBaseUrl: configStore.getApiBaseUrl() };
+  });
+
+  ipcMain.handle('workspace:choose', async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Select workspace directory',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+
+    if (result.canceled || !result.filePaths?.length) {
+      return null;
+    }
+
+    return normalizePath(result.filePaths[0]);
+  });
+
+  ipcMain.handle('workspace:set', async (_event, workspacePath: string) => {
+    if (!workspacePath) {
+      throw new Error('Workspace path is required');
+    }
+
+    const normalized = normalizePath(workspacePath);
+    await ensureWorkspaceStructure(normalized);
+    configStore.setWorkspacePath(normalized);
+
+    await restartWatcherIfReady();
+
+    return {
+      workspacePath: normalized,
+      syncActive: isSyncReady(),
+    };
+  });
+
+  ipcMain.handle('auth:login', async (_event, payload: { identifier: string; password: string; twoFactorToken?: string }) => {
+    const result = await authService.login(payload);
+
+    if (result.success) {
+      await restartWatcherIfReady();
+    }
+
+    return result;
+  });
+
+  ipcMain.handle('auth:logout', async () => {
+    await authService.logout();
+    await stopFileWatcher();
+    return { success: true };
+  });
+
+  ipcMain.handle('sync:restart', async () => {
+    await restartWatcherIfReady();
+    return { syncActive: isSyncReady() };
+  });
+
+  ipcMain.handle('files:list', async () => {
+    const workspacePath = configStore.getWorkspacePath();
+    if (!workspacePath || !isSyncReady()) {
+      return [];
+    }
+
+    if (workspaceSyncService.getFiles().length === 0) {
+      await workspaceSyncService.syncFromRemote(workspacePath);
+    }
+
+    return workspaceSyncService.getFiles();
+  });
+
+  ipcMain.handle('workspace:open-folder', async () => {
+    const workspacePath = configStore.getWorkspacePath();
+    if (!workspacePath) {
+      return { success: false, message: 'Workspace path is not configured yet.' };
+    }
+
+    const result = await shell.openPath(workspacePath);
+    if (result) {
+      return { success: false, message: result };
+    }
+
+    return { success: true };
+  });
+
+  ipcMain.handle('workspace:open-web', async () => {
+    const apiBaseUrl = configStore.getApiBaseUrl();
+    const url = deriveWebAppUrl(apiBaseUrl);
+
+    if (!url) {
+      return { success: false, message: 'API base URL is not configured yet.' };
+    }
+
+    await shell.openExternal(url);
+    return { success: true, url };
+  });
+}
+

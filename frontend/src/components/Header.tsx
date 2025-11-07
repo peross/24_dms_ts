@@ -77,6 +77,8 @@ export function Header({ onMobileMenuClick, viewMode, onViewModeChange }: Header
   const [profileModalOpen, setProfileModalOpen] = useState(false)
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false)
   const [uploadFileDialogOpen, setUploadFileDialogOpen] = useState(false)
+  const systemRootNames = new Set(['My Folders', 'General', 'Shared With Me'])
+  const isSystemRootSelected = selectedFolderPath ? systemRootNames.has(selectedFolderPath) : false
   
   // Responsive button overflow handling
   const buttonsContainerRef = useRef<HTMLDivElement>(null)
@@ -245,7 +247,7 @@ export function Header({ onMobileMenuClick, viewMode, onViewModeChange }: Header
     { id: 'save', condition: isTextFile, icon: Save, label: t('files.save'), onClick: handleSaveTextFile, disabled: false },
     { id: 'addFile', condition: true, icon: FilePlus, label: t('header.addFile'), onClick: () => {}, disabled: false },
     { id: 'addFolder', condition: true, icon: FolderPlus, label: t('header.addFolder'), onClick: () => setCreateFolderDialogOpen(true), disabled: false },
-    { id: 'upload', condition: true, icon: Upload, label: t('header.upload'), onClick: () => setUploadFileDialogOpen(true), disabled: selectedFolderId === null },
+    { id: 'upload', condition: true, icon: Upload, label: t('header.upload'), onClick: () => setUploadFileDialogOpen(true), disabled: selectedFolderId === null || isSystemRootSelected },
     { id: 'paste', condition: canPaste() && selectedFolderId !== null, icon: Clipboard, label: t('header.paste'), onClick: handlePaste, disabled: false },
     { id: 'copy', condition: true, icon: Copy, label: t('header.copy'), onClick: () => {}, disabled: !hasSelectedItems },
     { id: 'move', condition: true, icon: FolderInput, label: t('header.move'), onClick: () => {}, disabled: !hasSelectedItems },
@@ -328,7 +330,7 @@ export function Header({ onMobileMenuClick, viewMode, onViewModeChange }: Header
       resizeObserver.disconnect()
       window.removeEventListener('resize', updateOverflow)
     }
-  }, [onMobileMenuClick, enabledButtons.length, isTextFile, canPaste, selectedFolderId, hasSelectedItems])
+  }, [onMobileMenuClick, enabledButtons.length, isTextFile, canPaste, selectedFolderId, hasSelectedItems, isSystemRootSelected])
   
   const visibleButtons = enabledButtons.slice(0, Math.max(0, enabledButtons.length - overflowButtonCount))
   const overflowButtons = enabledButtons.slice(Math.max(0, enabledButtons.length - overflowButtonCount))

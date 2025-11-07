@@ -1,7 +1,6 @@
 import { useState, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { translateError } from "@/lib/utils/error-translator"
-import { useMutation } from "@tanstack/react-query"
 import { Upload, Loader2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -17,9 +16,9 @@ import { useUploadFile } from "@/features/files/hooks/useFiles"
 import { useLayout } from "@/components/Layout"
 
 interface UploadFileDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  folderId?: number | null
+  readonly open: boolean
+  readonly onOpenChange: (open: boolean) => void
+  readonly folderId?: number | null
 }
 
 export function UploadFileDialog({ open, onOpenChange, folderId }: UploadFileDialogProps) {
@@ -30,7 +29,7 @@ export function UploadFileDialog({ open, onOpenChange, folderId }: UploadFileDia
   const [error, setError] = useState("")
 
   // Use folderId prop if provided, otherwise use selected folder from context
-  const targetFolderId = folderId !== undefined ? folderId : selectedFolderId
+  const targetFolderId = folderId === undefined ? selectedFolderId : folderId
 
   const uploadMutation = useUploadFile()
 
@@ -54,10 +53,16 @@ export function UploadFileDialog({ open, onOpenChange, folderId }: UploadFileDia
 
     setError("")
 
+    const systemRootIds = new Set([1, 2, 3])
+    if (targetFolderId === undefined || targetFolderId === null || systemRootIds.has(targetFolderId)) {
+      setError(t('files.selectFolderToUpload'))
+      return
+    }
+
     uploadMutation.mutate(
       {
         files: selectedFiles,
-        folderId: targetFolderId || undefined,
+        folderId: targetFolderId,
       },
       {
         onSuccess: () => {
@@ -137,7 +142,7 @@ export function UploadFileDialog({ open, onOpenChange, folderId }: UploadFileDia
             {selectedFiles.length > 0 && (
               <div className="space-y-2 max-h-60 overflow-y-auto">
                 {selectedFiles.map((file, index) => (
-                  <div key={index} className="flex items-start justify-between p-3 bg-accent rounded-md gap-2">
+                  <div key={`${file.name}-${index}`} className="flex items-start justify-between p-3 bg-accent rounded-md gap-2">
                     <div className="flex-1 min-w-0 pr-2">
                       <p 
                         className="text-sm font-medium break-words overflow-wrap-anywhere" 

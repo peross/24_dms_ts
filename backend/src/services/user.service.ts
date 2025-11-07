@@ -1,6 +1,8 @@
+import { Transaction } from 'sequelize';
 import User from '../models/user.model';
 import Role from '../models/role.model';
 import UserRole from '../models/user-role.model';
+import { sequelize } from '../config/database';
 import { hashPassword, comparePassword } from '../utils/password.util';
 
 export interface CreateUserDto {
@@ -19,51 +21,50 @@ export interface LoginDto {
 
 export class UserService {
   async createUser(data: CreateUserDto): Promise<User> {
-    // Check if user already exists by email
-    const existingUserByEmail = await User.findOne({ where: { email: data.email } });
-    if (existingUserByEmail) {
-      throw new Error('User with this email already exists');
-    }
+    const transaction = await sequelize.transaction();
 
-    // Check if username is provided and if it already exists
-    if (data.username) {
-      const existingUserByUsername = await User.findOne({ where: { username: data.username } });
-      if (existingUserByUsername) {
-        throw new Error('Username is already taken');
+    try {
+      // Check if user already exists by email
+      const existingUserByEmail = await User.findOne({ where: { email: data.email }, transaction });
+      if (existingUserByEmail) {
+        throw new Error('User with this email already exists');
       }
-    }
 
-    // Hash password
-    const hashedPassword = await hashPassword(data.password);
-
-    // Create user
-    const user = await User.create({
-      email: data.email,
-      username: data.username,
-      password: hashedPassword,
-      firstName: data.firstName,
-      lastName: data.lastName,
-    });
-
-    // Assign roles if provided, otherwise assign default 'member' role
-    if (data.roleNames && data.roleNames.length > 0) {
-      await this.assignRoles(user.userId, data.roleNames);
-    } else {
-      // Assign default 'member' role if no roles are provided
-      const defaultRole = await Role.findOne({ where: { name: 'member' } });
-      if (defaultRole) {
-        await (user as any).addRole(defaultRole);
+      // Check if username is provided and if it already exists
+      if (data.username) {
+        const existingUserByUsername = await User.findOne({ where: { username: data.username }, transaction });
+        if (existingUserByUsername) {
+          throw new Error('Username is already taken');
+        }
       }
+
+      // Hash password
+      const hashedPassword = await hashPassword(data.password);
+
+      // Create user
+      const user = await User.create({
+        email: data.email,
+        username: data.username,
+        password: hashedPassword,
+        firstName: data.firstName,
+        lastName: data.lastName,
+      }, { transaction });
+
+      const roleNames = data.roleNames && data.roleNames.length > 0 ? data.roleNames : ['member'];
+      await this.replaceUserRoles(user.userId, roleNames, transaction);
+
+      await transaction.commit();
+
+      const createdUser = await this.findById(user.userId);
+      if (!createdUser) {
+        throw new Error('Failed to retrieve created user');
+      }
+
+      return createdUser;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
     }
-
-    // System folders are now conceptual only - no folder records are created for them
-    // Users will create folders and assign them to system folder types
-
-    // Remove password from response
-    const userJson = user.toJSON();
-    delete (userJson as any).password;
-
-    return userJson as User;
   }
 
   async findByEmail(email: string): Promise<User | null> {
@@ -138,24 +139,7 @@ export class UserService {
   }
 
   async assignRoles(userId: number, roleNames: string[]): Promise<void> {
-    const user = await User.findByPk(userId);
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    const roles = await Role.findAll({
-      where: { name: roleNames },
-    });
-
-    if (roles.length !== roleNames.length) {
-      throw new Error('One or more roles not found');
-    }
-
-    // Use addRoles instead of setRoles to avoid issues with bulk operations
-    // This ensures each role is added individually
-    for (const role of roles) {
-      await (user as any).addRole(role);
-    }
+    await this.replaceUserRoles(userId, roleNames);
   }
 
   /**
@@ -168,26 +152,7 @@ export class UserService {
       throw new Error('User not found');
     }
 
-    const roles = await Role.findAll({
-      where: { name: roleNames },
-    });
-
-    if (roles.length !== roleNames.length) {
-      throw new Error('One or more roles not found');
-    }
-
-    // Remove all existing roles by deleting from user_roles table directly
-    await UserRole.destroy({
-      where: { userId: user.userId },
-    });
-
-    // Then create new role assignments directly in the join table
-    for (const role of roles) {
-      await UserRole.create({
-        userId: user.userId,
-        roleId: role.roleId,
-      });
-    }
+    await this.replaceUserRoles(user.userId, roleNames);
   }
 
   async verifyPassword(user: User, password: string): Promise<boolean> {
@@ -233,7 +198,7 @@ export class UserService {
       // Allow clearing username (set to null/empty)
       if (data.username && data.username.trim() !== '') {
         // Validate username format (alphanumeric and underscore, 3-30 chars)
-        if (!/^[a-zA-Z0-9_]+$/.test(data.username)) {
+        if (!/^\w+$/.test(data.username)) {
           throw new Error('Username can only contain letters, numbers, and underscores');
         }
         if (data.username.length < 3 || data.username.length > 30) {
@@ -282,6 +247,36 @@ export class UserService {
     // Update password
     user.password = hashedPassword;
     await user.save();
+  }
+
+  private async replaceUserRoles(userId: number, roleNames: string[], transaction?: Transaction): Promise<void> {
+    const uniqueRoleNames = Array.from(new Set(roleNames));
+
+    const roles = await Role.findAll({
+      where: { name: uniqueRoleNames },
+      transaction,
+    });
+
+    if (roles.length !== uniqueRoleNames.length) {
+      throw new Error('One or more roles not found');
+    }
+
+    await UserRole.destroy({
+      where: { userId },
+      transaction,
+    });
+
+    if (roles.length === 0) {
+      return;
+    }
+
+    await UserRole.bulkCreate(
+      roles.map((role) => ({
+        userId,
+        roleId: role.roleId,
+      })),
+      { transaction }
+    );
   }
 }
 

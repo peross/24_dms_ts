@@ -1,0 +1,15 @@
+{
+	"folderMappings": {
+		"/home/pero/Documents/dms/My Folders": 2,
+		"/home/pero/Documents/dms/General/Uputstvo": 8,
+		"/home/pero/Documents/dms/My Folders/proba": 11,
+		"/home/pero/Documents/dms/My Folders/test": 9
+	},
+	"workspacePath": "/home/pero/Documents/dms",
+	"auth": {
+		"accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsImVtYWlsIjoic3VwZXJhZG1pbkBkZW1vLmNvbSIsInJvbGVzIjpbInN1cGVyX2FkbWluIl0sImlhdCI6MTc2MjUzMTI4MSwiZXhwIjoxNzYyNTMyMTgxfQ.TY70KuR3ccI6sEGbi6V93TNSxxK28XdT_e0-XPvXWPo",
+		"userId": 1,
+		"email": "superadmin@demo.com",
+		"displayName": "Super Admin"
+	}
+}
