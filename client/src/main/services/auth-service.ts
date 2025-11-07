@@ -1,6 +1,7 @@
 import { apiClient } from '../api/client';
 import { configStore, AuthState } from '../config-store';
 import { normalizeApiBaseUrl } from '../utils/url';
+import { setApiBaseUrl as configureSocketBaseUrl, setAuthToken as configureSocketAuthToken, disconnectSocket, requestResync } from './socket-service';
 
 interface LoginParams {
   identifier: string;
@@ -26,11 +27,14 @@ class AuthService {
     const storedBaseUrl = apiBaseUrl ?? configStore.getApiBaseUrl();
     if (storedBaseUrl) {
       apiClient.setBaseUrl(normalizeApiBaseUrl(storedBaseUrl));
+      configureSocketBaseUrl(storedBaseUrl);
     }
 
     const authState = configStore.getAuthState();
     if (authState?.accessToken) {
       apiClient.setAccessToken(authState.accessToken);
+      configureSocketAuthToken(authState.accessToken);
+      requestResync();
     }
 
     apiClient.setRefreshHandler(async () => this.refreshAccessToken());
@@ -40,6 +44,7 @@ class AuthService {
     const normalized = normalizeApiBaseUrl(apiBaseUrl);
     configStore.setApiBaseUrl(normalized);
     apiClient.setBaseUrl(normalized);
+    configureSocketBaseUrl(normalized);
   }
 
   async login(params: LoginParams): Promise<LoginResponse> {
@@ -75,6 +80,8 @@ class AuthService {
 
     configStore.setAuthState(authState);
     apiClient.setAccessToken(accessToken);
+    configureSocketAuthToken(accessToken);
+    requestResync();
 
     return {
       success: true,
@@ -83,6 +90,11 @@ class AuthService {
   }
 
   async refreshAccessToken(): Promise<string | undefined> {
+    const authState = configStore.getAuthState();
+    if (!authState?.accessToken) {
+      return undefined;
+    }
+
     try {
       const response = await apiClient.axios.post('/auth/refresh');
       const { accessToken } = response.data ?? {};
@@ -110,6 +122,10 @@ class AuthService {
   async logout(): Promise<void> {
     try {
       await apiClient.axios.post('/auth/logout');
+    } catch (error: any) {
+      if (error?.response?.status !== 401) {
+        console.warn('Logout request failed', error);
+      }
     } finally {
       this.clearAuth();
     }
@@ -118,6 +134,7 @@ class AuthService {
   clearAuth(): void {
     configStore.setAuthState(undefined);
     apiClient.reset();
+    disconnectSocket();
   }
 }
 

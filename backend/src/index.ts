@@ -2,12 +2,14 @@ import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
+import { createServer } from 'node:http';
 import { connectDatabase, sequelize } from './config/database';
 import { setupAssociations } from './models';
 import authRoutes from './routes/auth.route';
 import folderRoutes from './routes/folder.route';
 import fileRoutes from './routes/file.route';
 import adminRoutes from './routes/admin.route';
+import { initializeSocketServer } from './socket/socket-manager';
 
 dotenv.config();
 
@@ -191,8 +193,11 @@ const startServer = async () => {
       }
     }
     
+    const httpServer = createServer(app);
+    initializeSocketServer(httpServer);
+
     // Start server
-    app.listen(PORT, () => {
+    httpServer.listen(PORT, () => {
       console.log(`🚀 Server is running on http://localhost:${PORT}`);
       console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
     });

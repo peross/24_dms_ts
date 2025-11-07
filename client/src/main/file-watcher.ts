@@ -9,6 +9,11 @@ import { MY_FOLDERS_SYSTEM_ID } from '../shared/constants';
 import { workspaceSyncService } from './services/workspace-sync-service';
 
 let watcher: FSWatcher | null = null;
+let suppressEvents = false;
+
+export const setWatcherSuppressed = (value: boolean): void => {
+  suppressEvents = value;
+};
 
 export async function startFileWatcher(rootPath: string): Promise<void> {
   await stopFileWatcher();
@@ -17,10 +22,13 @@ export async function startFileWatcher(rootPath: string): Promise<void> {
   const myFoldersPath = getMyFoldersPath(rootPath);
   configStore.setFolderId(myFoldersPath, MY_FOLDERS_SYSTEM_ID);
 
+  setWatcherSuppressed(true);
   try {
     await workspaceSyncService.syncFromRemote(rootPath);
   } catch (error) {
     console.warn('Initial workspace sync failed; watcher will start without local cache', error);
+  } finally {
+    setWatcherSuppressed(false);
   }
 
   watcher = chokidar.watch(myFoldersPath, {
@@ -34,6 +42,9 @@ export async function startFileWatcher(rootPath: string): Promise<void> {
   });
 
   watcher.on('addDir', async (dirPath) => {
+    if (suppressEvents) {
+      return;
+    }
     try {
       if (path.basename(dirPath).startsWith('.')) {
         return;
@@ -45,6 +56,9 @@ export async function startFileWatcher(rootPath: string): Promise<void> {
   });
 
   watcher.on('add', async (filePath) => {
+    if (suppressEvents) {
+      return;
+    }
     try {
       if (path.basename(filePath).startsWith('.')) {
         return;
@@ -56,6 +70,9 @@ export async function startFileWatcher(rootPath: string): Promise<void> {
   });
 
   watcher.on('unlink', async (filePath) => {
+    if (suppressEvents) {
+      return;
+    }
     if (path.basename(filePath).startsWith('.')) {
       return;
     }
@@ -70,6 +87,9 @@ export async function startFileWatcher(rootPath: string): Promise<void> {
   });
 
   watcher.on('unlinkDir', async (dirPath) => {
+    if (suppressEvents) {
+      return;
+    }
     if (path.basename(dirPath).startsWith('.')) {
       return;
     }

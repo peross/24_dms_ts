@@ -27,6 +27,7 @@ async function createWindow(): Promise<void> {
     height: 800,
     minWidth: 1024,
     minHeight: 640,
+    autoHideMenuBar: true,
     webPreferences: {
       preload: getPreloadPath(),
       contextIsolation: true,

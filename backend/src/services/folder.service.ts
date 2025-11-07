@@ -477,7 +477,7 @@ export class FolderService {
   /**
    * Delete folder
    */
-  async deleteFolder(folderId: number, userId: number): Promise<void> {
+  async deleteFolder(folderId: number, userId: number): Promise<Folder> {
     const folder = await Folder.findByPk(folderId);
     
     if (!folder) {
@@ -497,6 +497,7 @@ export class FolderService {
 
     // Delete folder (cascade will delete children)
     await folder.destroy();
+    return folder;
   }
 
   /**

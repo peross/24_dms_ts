@@ -5,8 +5,19 @@ import UserService from '../services/user.service';
 import SystemFolderService from '../services/system-folder.service';
 import { SystemFolderType } from '../models/system-folder.model';
 import Folder from '../models/folder.model';
+import { eventBus, AppEvent } from '../events/event-bus';
 
 export class FolderController {
+  private serializeFolder(folder: Folder) {
+    return {
+      folderId: folder.folderId,
+      name: folder.name,
+      parentId: folder.parentId ?? null,
+      systemFolderId: folder.systemFolderId ?? null,
+      path: folder.path,
+    };
+  }
+
   /**
    * Create a new folder
    */
@@ -58,6 +69,12 @@ export class FolderController {
         userId: req.user.userId,
         systemFolderId: finalSystemFolderId,
         userRoles,
+      });
+
+      console.log(`[FolderController] Created folder ${folder.folderId} for user ${req.user.userId}`);
+      eventBus.emit(AppEvent.FOLDER_CREATED, {
+        userId: req.user.userId,
+        folder: this.serializeFolder(folder),
       });
 
       res.status(201).json({ folder });
@@ -202,6 +219,11 @@ export class FolderController {
       }
 
       const folder = await FolderService.updateFolder(folderId, req.user.userId, updateData);
+      console.log(`[FolderController] Updated folder ${folder.folderId} for user ${req.user.userId}`);
+      eventBus.emit(AppEvent.FOLDER_UPDATED, {
+        userId: req.user.userId,
+        folder: this.serializeFolder(folder),
+      });
       res.status(200).json({ folder });
     } catch (error: any) {
       if (error.message === 'Access denied' || error.message === 'Folder not found') {
@@ -232,7 +254,14 @@ export class FolderController {
         return;
       }
 
-      await FolderService.deleteFolder(folderId, req.user.userId);
+      const deletedFolder = await FolderService.deleteFolder(folderId, req.user.userId);
+
+      console.log(`[FolderController] Deleted folder ${folderId} for user ${req.user.userId}`);
+      eventBus.emit(AppEvent.FOLDER_DELETED, {
+        userId: req.user.userId,
+        folder: this.serializeFolder(deletedFolder),
+      });
+
       res.status(200).json({ message: 'Folder deleted successfully' });
     } catch (error: any) {
       if (error.message === 'Access denied' || error.message === 'Folder not found') {

@@ -395,7 +395,7 @@ export class FileService {
   /**
    * Delete file
    */
-  async deleteFile(fileId: number, userId: number): Promise<void> {
+  async deleteFile(fileId: number, userId: number): Promise<File> {
     const file = await File.findOne({
       where: {
         fileId,
@@ -422,6 +422,7 @@ export class FileService {
 
     // Delete file record (cascade will delete versions)
     await file.destroy();
+    return file;
   }
 
   /**

@@ -4,6 +4,7 @@ import FileService from '../services/file.service';
 import { AuthRequest } from '../middleware/auth.middleware';
 import UserService from '../services/user.service';
 import { FileErrorCode } from '../utils/error-codes';
+import { eventBus, AppEvent } from '../events/event-bus';
 
 /**
  * Map error messages to error codes for translation
@@ -57,6 +58,18 @@ const upload = multer({
 export const uploadMiddleware = upload.array('files', 50); // Allow up to 50 files
 
 export class FileController {
+  private serializeFile(file: any) {
+    return {
+      fileId: file.fileId,
+      name: file.name,
+      folderId: file.folderId ?? null,
+      systemFolderId: file.folder?.systemFolderId ?? null,
+      path: file.path ?? null,
+      size: Number(file.size ?? 0),
+      mimeType: file.mimeType,
+    };
+  }
+
   /**
    * Decode filename with proper UTF-8 handling
    */
@@ -160,6 +173,14 @@ export class FileController {
       }
 
       // Return single file object for backward compatibility, or array if multiple
+      uploadedFiles.forEach((file) => {
+        console.log(`[FileController] Created file ${file.fileId} for user ${req.user!.userId}`);
+        eventBus.emit(AppEvent.FILE_CREATED, {
+          userId: req.user!.userId,
+          file: this.serializeFile(file),
+        });
+      });
+
       if (uploadedFiles.length === 1) {
         res.status(201).json({ file: uploadedFiles[0] });
       } else {
@@ -385,6 +406,12 @@ export class FileController {
         userRoles
       );
 
+      console.log(`[FileController] Updated file ${file.fileId} for user ${req.user.userId}`);
+      eventBus.emit(AppEvent.FILE_UPDATED, {
+        userId: req.user.userId,
+        file: this.serializeFile(file),
+      });
+
       res.status(200).json({ file });
     } catch (error: any) {
       const errorCode = getErrorCode(error.message || 'Failed to update file');
@@ -414,7 +441,13 @@ export class FileController {
         return;
       }
 
-      await FileService.deleteFile(fileId, req.user.userId);
+      const deletedFile = await FileService.deleteFile(fileId, req.user.userId);
+
+      console.log(`[FileController] Deleted file ${fileId} for user ${req.user.userId}`);
+      eventBus.emit(AppEvent.FILE_DELETED, {
+        userId: req.user.userId,
+        file: this.serializeFile(deletedFile),
+      });
 
       res.status(200).json({ message: 'File deleted successfully' });
     } catch (error: any) {

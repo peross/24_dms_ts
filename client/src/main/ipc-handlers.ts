@@ -5,6 +5,7 @@ import { startFileWatcher, stopFileWatcher } from './file-watcher';
 import { authService } from './services/auth-service';
 import { normalizePath } from './utils/path';
 import { workspaceSyncService } from './services/workspace-sync-service';
+import { setApiBaseUrl as configureSocketBaseUrl, requestResync } from './services/socket-service';
 import { deriveWebAppUrl } from './utils/url';
 
 function isSyncReady(): boolean {
@@ -43,6 +44,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('app:set-api-base-url', async (_event, apiBaseUrl: string) => {
     authService.setApiBaseUrl(apiBaseUrl);
+    configureSocketBaseUrl(apiBaseUrl);
     return { apiBaseUrl: configStore.getApiBaseUrl() };
   });
 
@@ -69,6 +71,7 @@ export function registerIpcHandlers(): void {
     configStore.setWorkspacePath(normalized);
 
     await restartWatcherIfReady();
+    requestResync();
 
     return {
       workspacePath: normalized,
@@ -77,13 +80,21 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('auth:login', async (_event, payload: { identifier: string; password: string; twoFactorToken?: string }) => {
-    const result = await authService.login(payload);
+    try {
+      const result = await authService.login(payload);
 
-    if (result.success) {
-      await restartWatcherIfReady();
+      if (result.success) {
+        await restartWatcherIfReady();
+      }
+
+      return result;
+    } catch (error: any) {
+      const message = error?.response?.data?.error ?? error?.message ?? 'Login failed. Please check your credentials and try again.';
+      return {
+        success: false,
+        message,
+      };
     }
-
-    return result;
   });
 
   ipcMain.handle('auth:logout', async () => {

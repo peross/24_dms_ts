@@ -24,3 +24,11 @@ export function deriveWebAppUrl(apiBaseUrl?: string | null): string | null {
   return normalized;
 }
 
+export function deriveSocketUrl(apiBaseUrl?: string | null): string | null {
+  const base = deriveWebAppUrl(apiBaseUrl);
+  if (!base) {
+    return null;
+  }
+  return base;
+}
+
