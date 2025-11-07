@@ -7,6 +7,7 @@ export enum AppEvent {
   FILE_CREATED = 'file.created',
   FILE_UPDATED = 'file.updated',
   FILE_DELETED = 'file.deleted',
+  NOTIFICATION_CREATED = 'notification.created',
 }
 
 export interface FolderEventData {
@@ -30,6 +31,19 @@ export interface FileEventData {
     path: string | null;
     size: number;
     mimeType: string;
+  };
+}
+
+export interface NotificationEventData {
+  userId: number;
+  notification: {
+    notificationId: number;
+    type: string;
+    title: string;
+    message: string;
+    metadata?: Record<string, any> | null;
+    read: boolean;
+    createdAt: Date;
   };
 }
 

@@ -22,7 +22,9 @@
     "success": "Uspeh",
     "error": "Greška",
     "warning": "Upozorenje",
-    "info": "Informacija"
+    "info": "Informacija",
+    "expand": "Proširi",
+    "collapse": "Skupi"
   },
   "auth": {
     "login": {
@@ -156,7 +158,30 @@
     "justNow": "Upravo sada",
     "minutesAgo": "Pre {{minutes}} min",
     "hoursAgo": "Pre {{hours}} sati",
-    "daysAgo": "Pre {{days}} dana"
+    "daysAgo": "Pre {{days}} dana",
+    "loading": "Učitavanje obaveštenja...",
+    "markRead": "Označi kao pročitano",
+    "new": "Novo",
+    "types": {
+      "fileUploaded": "Fajl je otpremljen",
+      "fileUpdated": "Fajl je ažuriran",
+      "fileDeleted": "Fajl je obrisan",
+      "folderCreated": "Folder je napravljen",
+      "folderUpdated": "Folder je izmenjen",
+      "folderDeleted": "Folder je obrisan"
+    },
+    "descriptions": {
+      "path": "Lokacija: {{path}}",
+      "previousPath": "Prethodna lokacija: {{path}}",
+      "size": "Veličina: {{size}}",
+      "folderId": "ID foldera: {{id}}",
+      "parentId": "ID roditeljskog foldera: {{id}}",
+      "systemFolderId": "ID sistemskog foldera: {{id}}",
+      "fileName": "Fajl: {{name}}",
+      "folderName": "Folder: {{name}}",
+      "parentFolderName": "Roditeljski folder: {{name}}",
+      "systemFolderName": "Sistemski folder: {{name}}"
+    }
   },
   "sidebar": {
     "dashboard": "Kontrolna tabla",
@@ -182,33 +207,6 @@
     "sharedDescription": "Fajlovi podeljeni sa vama",
     "recentDescription": "Nedavno pristupljeni fajlovi",
     "trashDescription": "Obrisani fajlovi"
-  },
-  "common": {
-    "loading": "Učitavanje...",
-    "save": "Sačuvaj",
-    "cancel": "Otkaži",
-    "delete": "Obriši",
-    "edit": "Izmeni",
-    "close": "Zatvori",
-    "confirm": "Potvrdi",
-    "search": "Pretraži",
-    "refresh": "Osveži",
-    "upload": "Otpremi",
-    "download": "Preuzmi",
-    "copy": "Kopiraj",
-    "move": "Premesti",
-    "rename": "Preimenuj",
-    "archive": "Arhiviraj",
-    "permission": "Dozvola",
-    "more": "Više",
-    "all": "Sve",
-    "options": "Opcije",
-    "success": "Uspeh",
-    "error": "Greška",
-    "warning": "Upozorenje",
-    "info": "Informacija",
-    "expand": "Proširi",
-    "collapse": "Skupi"
   },
   "files": {
     "name": "Ime",

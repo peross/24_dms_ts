@@ -160,7 +160,30 @@
     "justNow": "Just now",
     "minutesAgo": "{{minutes}}m ago",
     "hoursAgo": "{{hours}}h ago",
-    "daysAgo": "{{days}}d ago"
+    "daysAgo": "{{days}}d ago",
+    "loading": "Loading notifications...",
+    "markRead": "Mark as read",
+    "new": "New",
+    "types": {
+      "fileUploaded": "File was uploaded",
+      "fileUpdated": "File was updated",
+      "fileDeleted": "File was deleted",
+      "folderCreated": "Folder was created",
+      "folderUpdated": "Folder was updated",
+      "folderDeleted": "Folder was deleted"
+    },
+    "descriptions": {
+      "path": "Location: {{path}}",
+      "previousPath": "Previous location: {{path}}",
+      "size": "Size: {{size}}",
+      "folderId": "Folder ID: {{id}}",
+      "parentId": "Parent folder ID: {{id}}",
+      "systemFolderId": "System folder ID: {{id}}",
+      "fileName": "File: {{name}}",
+      "folderName": "Folder: {{name}}",
+      "parentFolderName": "Parent folder: {{name}}",
+      "systemFolderName": "System folder: {{name}}"
+    }
   },
   "sidebar": {
     "dashboard": "Dashboard",

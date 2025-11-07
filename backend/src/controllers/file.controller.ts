@@ -301,6 +301,12 @@ export class FileController {
         file.size
       );
 
+      console.log(`[FileController] Uploaded new version for file ${updatedFile.fileId} by user ${req.user.userId}`);
+      eventBus.emit(AppEvent.FILE_UPDATED, {
+        userId: req.user.userId,
+        file: this.serializeFile(updatedFile),
+      });
+
       res.status(200).json({ file: updatedFile });
     } catch (error: any) {
       const errorCode = getErrorCode(error.message || 'Failed to upload new version');

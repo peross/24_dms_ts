@@ -1,7 +1,7 @@
 import { Server as HttpServer } from 'node:http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { verifyAccessToken, JWTPayload } from '../utils/jwt.util';
-import { eventBus, AppEvent, FolderEventData, FileEventData } from '../events/event-bus';
+import { eventBus, AppEvent, FolderEventData, FileEventData, NotificationEventData } from '../events/event-bus';
 
 let io: SocketIOServer | null = null;
 
@@ -36,6 +36,11 @@ const forwardFolderEvent = (event: AppEvent, data: FolderEventData): void => {
 const forwardFileEvent = (event: AppEvent, data: FileEventData): void => {
   if (!io) return;
   io.to(userRoom(data.userId)).emit(event, data.file);
+};
+
+const forwardNotificationEvent = (data: NotificationEventData): void => {
+  if (!io) return;
+  io.to(userRoom(data.userId)).emit(AppEvent.NOTIFICATION_CREATED, data.notification);
 };
 
 export const initializeSocketServer = (server: HttpServer): SocketIOServer => {
@@ -88,6 +93,10 @@ export const initializeSocketServer = (server: HttpServer): SocketIOServer => {
   eventBus.on(AppEvent.FILE_DELETED, (payload: FileEventData) => {
     console.log(`📨 [Socket] file.deleted user=${payload.userId}`, payload.file);
     forwardFileEvent(AppEvent.FILE_DELETED, payload);
+  });
+  eventBus.on(AppEvent.NOTIFICATION_CREATED, (payload: NotificationEventData) => {
+    console.log(`📨 [Socket] notification.created user=${payload.userId}`, payload.notification);
+    forwardNotificationEvent(payload);
   });
 
   return io;

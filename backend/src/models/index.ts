@@ -5,9 +5,10 @@ import RefreshToken from './refresh-token.model';
 import Folder from './folder.model';
 import File from './file.model';
 import FileVersion from './file-version.model';
+import Notification from './notification.model';
 
 // Export all models
-export { User, Role, UserRole, RefreshToken, Folder, File, FileVersion };
+export { User, Role, UserRole, RefreshToken, Folder, File, FileVersion, Notification };
 
 // Export associations setup
 export const setupAssociations = () => {

@@ -10,6 +10,8 @@ import folderRoutes from './routes/folder.route';
 import fileRoutes from './routes/file.route';
 import adminRoutes from './routes/admin.route';
 import { initializeSocketServer } from './socket/socket-manager';
+import notificationRoutes from './routes/notification.route';
+import { registerNotificationEventHandlers } from './events/register-notification-handlers';
 
 dotenv.config();
 
@@ -48,6 +50,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/folders', folderRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // API info endpoint
 app.get('/api', (_req: Request, res: Response) => {
@@ -195,6 +198,7 @@ const startServer = async () => {
     
     const httpServer = createServer(app);
     initializeSocketServer(httpServer);
+    registerNotificationEventHandlers();
 
     // Start server
     httpServer.listen(PORT, () => {

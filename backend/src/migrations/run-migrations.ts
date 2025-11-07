@@ -7,6 +7,7 @@ import { addSystemFolderType } from './add-system-folder-type';
 import { refactorSystemFolders } from './refactor-system-folders';
 import { createUserSystemFolderTable } from './create-user-system-folder-table';
 import { refactorSystemFoldersSimple } from './refactor-system-folders-simple';
+import { createNotificationsTable } from './create-notifications-table';
 
 dotenv.config();
 
@@ -37,6 +38,9 @@ async function runMigrations() {
     
     // Refactor to make system folders conceptual only (no folder records for system folders)
     await refactorSystemFoldersSimple();
+
+    // Create notifications table
+    await createNotificationsTable();
     
     console.log('\n✅ All migrations completed successfully!');
     process.exit(0);
