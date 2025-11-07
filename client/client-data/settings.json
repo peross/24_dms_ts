@@ -5,10 +5,5 @@
 		"/home/pero/Documents/dms/My Folders/proba": 11
 	},
 	"workspacePath": "/home/pero/Documents/dms",
-	"auth": {
-		"accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsImVtYWlsIjoic3VwZXJhZG1pbkBkZW1vLmNvbSIsInJvbGVzIjpbInN1cGVyX2FkbWluIl0sImlhdCI6MTc2MjU0ODkzNSwiZXhwIjoxNzYyNTQ5ODM1fQ.4Itcw3fn3G-Jz6OD0kNlj3Uw5dIIdiUTUDYqP8kyT6c",
-		"userId": 1,
-		"email": "superadmin@demo.com",
-		"displayName": "Super Admin"
-	}
+	"apiBaseUrl": "http://localhost:3000/api"
 }

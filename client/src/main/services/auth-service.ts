@@ -25,9 +25,13 @@ interface LoginResponse {
 class AuthService {
   initialize(apiBaseUrl?: string): void {
     const storedBaseUrl = apiBaseUrl ?? configStore.getApiBaseUrl();
-    if (storedBaseUrl) {
-      apiClient.setBaseUrl(normalizeApiBaseUrl(storedBaseUrl));
-      configureSocketBaseUrl(storedBaseUrl);
+    const normalizedBaseUrl = normalizeApiBaseUrl(storedBaseUrl ?? 'http://localhost:3000/api');
+
+    apiClient.setBaseUrl(normalizedBaseUrl);
+    configureSocketBaseUrl(normalizedBaseUrl);
+
+    if (!storedBaseUrl) {
+      configStore.setApiBaseUrl(normalizedBaseUrl);
     }
 
     const authState = configStore.getAuthState();

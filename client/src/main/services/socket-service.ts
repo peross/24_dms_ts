@@ -7,6 +7,12 @@ import { setWatcherSuppressed } from '../file-watcher';
 import { ensureWorkspaceStructure } from '../workspace-manager';
 import { normalizePath } from '../utils/path';
 
+interface NotificationPayload {
+  notificationId: number;
+  type: string;
+  metadata?: Record<string, unknown> | null;
+}
+
 type SocketInstance = Socket<DefaultEventsMap, DefaultEventsMap>;
 
 let socket: SocketInstance | null = null;
@@ -80,6 +86,29 @@ const registerEventHandlers = (activeSocket: SocketInstance): void => {
     });
   }
 
+  const notificationResyncTypes = new Set<NotificationPayload['type']>([
+    'file_uploaded',
+    'file_updated',
+    'file_deleted',
+    'folder_created',
+    'folder_updated',
+    'folder_deleted',
+  ]);
+
+  activeSocket.on('notification.created', (payload: NotificationPayload) => {
+    if (!payload?.type) {
+      return;
+    }
+
+    const shouldResync = notificationResyncTypes.has(payload.type) || Boolean(payload.metadata);
+    if (shouldResync) {
+      console.log('[socket] notification received, scheduling resync', {
+        type: payload.type,
+      });
+      scheduleResync();
+    }
+  });
+
   activeSocket.on('connect', () => {
     console.log('[socket] connected to server');
     scheduleResync(100);
@@ -100,12 +129,17 @@ const cleanupSocket = (): void => {
 
 const initializeSocket = (): void => {
   if (!currentToken || !currentSocketUrl) {
+    console.log('[socket] cannot initialize (missing token or URL)', {
+      hasToken: Boolean(currentToken),
+      currentSocketUrl,
+    });
     console.log('[socket] missing token or URL, cleaning up socket connection');
     cleanupSocket();
     return;
   }
 
   if (socket) {
+    console.log('[socket] reusing existing socket, updating auth token');
     // Update auth token and reconnect if necessary
     socket.auth = { token: currentToken };
     if (!socket.connected) {
@@ -125,6 +159,7 @@ const initializeSocket = (): void => {
 };
 
 export const setApiBaseUrl = (apiBaseUrl?: string): void => {
+  console.log('[socket] setApiBaseUrl called', { apiBaseUrl });
   if (!apiBaseUrl) {
     currentSocketUrl = undefined;
     cleanupSocket();
@@ -141,6 +176,7 @@ export const setApiBaseUrl = (apiBaseUrl?: string): void => {
 };
 
 export const setAuthToken = (token?: string): void => {
+  console.log('[socket] setAuthToken called', { hasToken: Boolean(token) });
   currentToken = token;
   if (!token) {
     cleanupSocket();
