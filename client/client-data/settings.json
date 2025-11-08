@@ -1,15 +1,9 @@
 {
 	"folderMappings": {
 		"/home/pero/Documents/dms/My Folders": 2,
-		"/home/pero/Documents/dms/My Folders/proba": 11,
-		"/home/pero/Documents/dms/General/Uputstvo": 8
+		"/home/pero/Documents/dms/General/Uputstvo": 8,
+		"/home/pero/Documents/dms/My Folders/proba": 11
 	},
 	"workspacePath": "/home/pero/Documents/dms",
-	"apiBaseUrl": "http://localhost:3000/api",
-	"auth": {
-		"accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsImVtYWlsIjoic3VwZXJhZG1pbkBkZW1vLmNvbSIsInJvbGVzIjpbInN1cGVyX2FkbWluIl0sImlhdCI6MTc2MjYwODI3MCwiZXhwIjoxNzYyNjA5MTcwfQ.XRR1wpCiQ5Ee6jqowYLkqLzQ4Yca5-a_NJnIMaFeiwE",
-		"userId": 1,
-		"email": "superadmin@demo.com",
-		"displayName": "Super Admin"
-	}
+	"apiBaseUrl": "http://localhost:3000/api"
 }

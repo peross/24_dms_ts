@@ -13,9 +13,16 @@ declare global {
       listFiles: () => Promise<import('../shared/types').SyncedFileEntry[]>;
       openWorkspaceFolder: () => Promise<{ success: boolean; message?: string }>;
       openWebApp: () => Promise<{ success: boolean; message?: string; url?: string }>;
+      getNotifications: (
+        params?: { limit?: number; offset?: number; unreadOnly?: boolean }
+      ) => Promise<{ total: number; items: Array<Record<string, any>>; error?: string }>;
+      markNotificationRead: (notificationId: number) => Promise<{ success: boolean; notification?: Record<string, any>; error?: string }>;
+      markAllNotificationsRead: () => Promise<{ success: boolean; error?: string }>;
       onAuthStateChanged: (
         callback: (payload: { isAuthenticated: boolean; email: string | null; displayName: string | null }) => void
       ) => () => void;
+      onNotificationCreated: (callback: (notification: Record<string, any>) => void) => () => void;
+      onNotificationUpdated: (callback: (notification: Record<string, any>) => void) => () => void;
     };
   }
 

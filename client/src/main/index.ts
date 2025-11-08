@@ -5,6 +5,8 @@ import { registerIpcHandlers } from './ipc-handlers';
 import { authService } from './services/auth-service';
 import { configStore, AuthState } from './config-store';
 import { startFileWatcher } from './file-watcher';
+import type { NotificationItem } from './services/notification-service';
+import { onNotificationCreated, onNotificationUpdated } from './services/socket-service';
 
 const isDev = process.env.NODE_ENV === 'development' || Boolean(process.env.VITE_DEV_SERVER_URL);
 
@@ -67,10 +69,30 @@ function broadcastAuthState(state: AuthState | undefined): void {
   }
 }
 
+function broadcastNotification(channel: 'notification:created' | 'notification:updated', notification: NotificationItem): void {
+  const payload = {
+    ...notification,
+    createdAt:
+      typeof notification.createdAt === 'string'
+        ? notification.createdAt
+        : new Date(notification.createdAt).toISOString(),
+  };
+
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send(channel, payload);
+  }
+}
+
 async function bootstrap(): Promise<void> {
   authService.initialize();
   authService.onAuthStateChanged((state) => {
     broadcastAuthState(state);
+  });
+  onNotificationCreated((notification) => {
+    broadcastNotification('notification:created', notification);
+  });
+  onNotificationUpdated((notification) => {
+    broadcastNotification('notification:updated', notification);
   });
   registerIpcHandlers();
   await createWindow();

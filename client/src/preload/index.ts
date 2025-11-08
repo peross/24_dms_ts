@@ -12,10 +12,34 @@ const api = {
   listFiles: () => ipcRenderer.invoke('files:list'),
   openWorkspaceFolder: () => ipcRenderer.invoke('workspace:open-folder'),
   openWebApp: () => ipcRenderer.invoke('workspace:open-web'),
+  getNotifications: (params?: { limit?: number; offset?: number; unreadOnly?: boolean }) =>
+    ipcRenderer.invoke('notifications:list', params ?? {}),
+  markNotificationRead: (notificationId: number) => ipcRenderer.invoke('notifications:mark-read', notificationId),
+  markAllNotificationsRead: () => ipcRenderer.invoke('notifications:mark-all-read'),
   onAuthStateChanged: (callback: (payload: { isAuthenticated: boolean; email: string | null; displayName: string | null }) => void) => {
     const channel = 'auth:state-changed';
     const listener = (_event: Electron.IpcRendererEvent, payload: { isAuthenticated: boolean; email: string | null; displayName: string | null }) => {
       callback(payload);
+    };
+    ipcRenderer.on(channel, listener);
+    return () => {
+      ipcRenderer.removeListener(channel, listener);
+    };
+  },
+  onNotificationCreated: (callback: (notification: any) => void) => {
+    const channel = 'notification:created';
+    const listener = (_event: Electron.IpcRendererEvent, notification: any) => {
+      callback(notification);
+    };
+    ipcRenderer.on(channel, listener);
+    return () => {
+      ipcRenderer.removeListener(channel, listener);
+    };
+  },
+  onNotificationUpdated: (callback: (notification: any) => void) => {
+    const channel = 'notification:updated';
+    const listener = (_event: Electron.IpcRendererEvent, notification: any) => {
+      callback(notification);
     };
     ipcRenderer.on(channel, listener);
     return () => {

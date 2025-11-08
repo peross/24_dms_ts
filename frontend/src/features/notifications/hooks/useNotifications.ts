@@ -8,7 +8,8 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 
 const NOTIFICATIONS_QUERY_KEY = ['notifications', 'list'] as const;
 const SOCKET_NAMESPACE_REGEX = /\/api\/?$/;
-const SOCKET_NOTIFICATION_EVENT = 'notification.created' as const;
+const SOCKET_NOTIFICATION_CREATED_EVENT = 'notification.created' as const;
+const SOCKET_NOTIFICATION_UPDATED_EVENT = 'notification.updated' as const;
 
 let socket: Socket | null = null;
 
@@ -136,10 +137,12 @@ export function useNotifications() {
       });
     };
 
-    activeSocket.on(SOCKET_NOTIFICATION_EVENT, handleNotification);
+    activeSocket.on(SOCKET_NOTIFICATION_CREATED_EVENT, handleNotification);
+    activeSocket.on(SOCKET_NOTIFICATION_UPDATED_EVENT, handleNotification);
 
     return () => {
-      activeSocket.off(SOCKET_NOTIFICATION_EVENT, handleNotification);
+      activeSocket.off(SOCKET_NOTIFICATION_CREATED_EVENT, handleNotification);
+      activeSocket.off(SOCKET_NOTIFICATION_UPDATED_EVENT, handleNotification);
     };
   }, [user, addOrUpdateNotification]);
 

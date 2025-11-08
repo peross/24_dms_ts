@@ -7,6 +7,12 @@ import { normalizePath } from './utils/path';
 import { workspaceSyncService } from './services/workspace-sync-service';
 import { setApiBaseUrl as configureSocketBaseUrl, requestResync } from './services/socket-service';
 import { deriveWebAppUrl } from './utils/url';
+import {
+  fetchNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  NotificationListParams,
+} from './services/notification-service';
 
 function isSyncReady(): boolean {
   return Boolean(configStore.getWorkspacePath() && configStore.getAuthState()?.accessToken);
@@ -145,6 +151,55 @@ export function registerIpcHandlers(): void {
 
     await shell.openExternal(url);
     return { success: true, url };
+  });
+
+  ipcMain.handle('notifications:list', async (_event, params: NotificationListParams = {}) => {
+    try {
+      const authState = configStore.getAuthState();
+      if (!authState?.accessToken) {
+        return { total: 0, items: [] };
+      }
+      return await fetchNotifications(params);
+    } catch (error: any) {
+      console.error('Failed to list notifications', error);
+      return {
+        total: 0,
+        items: [],
+        error: error?.message ?? 'Failed to fetch notifications',
+      };
+    }
+  });
+
+  ipcMain.handle('notifications:mark-read', async (_event, notificationId: number) => {
+    if (!Number.isFinite(notificationId)) {
+      return { success: false, error: 'Invalid notification id' };
+    }
+    try {
+      const notification = await markNotificationAsRead(notificationId);
+      return {
+        success: Boolean(notification),
+        notification,
+      };
+    } catch (error: any) {
+      console.error('Failed to mark notification as read', error);
+      return {
+        success: false,
+        error: error?.message ?? 'Failed to update notification',
+      };
+    }
+  });
+
+  ipcMain.handle('notifications:mark-all-read', async () => {
+    try {
+      await markAllNotificationsAsRead();
+      return { success: true };
+    } catch (error: any) {
+      console.error('Failed to mark all notifications as read', error);
+      return {
+        success: false,
+        error: error?.message ?? 'Failed to update notifications',
+      };
+    }
   });
 }
 

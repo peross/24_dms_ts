@@ -38,9 +38,9 @@ const forwardFileEvent = (event: AppEvent, data: FileEventData): void => {
   io.to(userRoom(data.userId)).emit(event, data.file);
 };
 
-const forwardNotificationEvent = (data: NotificationEventData): void => {
+const forwardNotificationEvent = (data: NotificationEventData, event: AppEvent = AppEvent.NOTIFICATION_CREATED): void => {
   if (!io) return;
-  io.to(userRoom(data.userId)).emit(AppEvent.NOTIFICATION_CREATED, data.notification);
+  io.to(userRoom(data.userId)).emit(event, data.notification);
 };
 
 export const initializeSocketServer = (server: HttpServer): SocketIOServer => {
@@ -97,6 +97,10 @@ export const initializeSocketServer = (server: HttpServer): SocketIOServer => {
   eventBus.on(AppEvent.NOTIFICATION_CREATED, (payload: NotificationEventData) => {
     console.log(`📨 [Socket] notification.created user=${payload.userId}`, payload.notification);
     forwardNotificationEvent(payload);
+  });
+  eventBus.on(AppEvent.NOTIFICATION_UPDATED, (payload: NotificationEventData) => {
+    console.log(`📨 [Socket] notification.updated user=${payload.userId}`, payload.notification);
+    forwardNotificationEvent(payload, AppEvent.NOTIFICATION_UPDATED);
   });
 
   return io;

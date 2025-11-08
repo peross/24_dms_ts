@@ -6,12 +6,19 @@ import { workspaceSyncService } from './workspace-sync-service';
 import { setWatcherSuppressed } from '../file-watcher';
 import { ensureWorkspaceStructure } from '../workspace-manager';
 import { normalizePath } from '../utils/path';
+import type { NotificationItem } from './notification-service';
 
 interface NotificationPayload {
   notificationId: number;
   type: string;
+  title?: string;
+  message?: string;
   metadata?: Record<string, unknown> | null;
+  read?: boolean;
+  createdAt?: string | number | Date;
 }
+
+type NotificationListener = (notification: NotificationItem) => void;
 
 type SocketInstance = Socket<DefaultEventsMap, DefaultEventsMap>;
 
@@ -21,6 +28,8 @@ let currentSocketUrl: string | undefined;
 let resyncTimer: NodeJS.Timeout | null = null;
 let resyncInProgress = false;
 let resyncQueued = false;
+const notificationCreatedListeners = new Set<NotificationListener>();
+const notificationUpdatedListeners = new Set<NotificationListener>();
 
 const RESYNC_DEBOUNCE_MS = 750;
 
@@ -96,7 +105,8 @@ const registerEventHandlers = (activeSocket: SocketInstance): void => {
   ]);
 
   activeSocket.on('notification.created', (payload: NotificationPayload) => {
-    if (!payload?.type) {
+    const normalized = normalizeNotificationPayload(payload);
+    if (!normalized) {
       return;
     }
 
@@ -107,6 +117,17 @@ const registerEventHandlers = (activeSocket: SocketInstance): void => {
       });
       scheduleResync();
     }
+
+    notifyListeners(notificationCreatedListeners, normalized);
+  });
+
+  activeSocket.on('notification.updated', (payload: NotificationPayload) => {
+    const normalized = normalizeNotificationPayload(payload);
+    if (!normalized) {
+      return;
+    }
+
+    notifyListeners(notificationUpdatedListeners, normalized);
   });
 
   activeSocket.on('connect', () => {
@@ -198,4 +219,73 @@ export const getSocketStatus = (): { connected: boolean; url?: string } => ({
   connected: Boolean(socket?.connected),
   url: currentSocketUrl,
 });
+
+export const onNotificationCreated = (listener: NotificationListener): (() => void) => {
+  notificationCreatedListeners.add(listener);
+  return () => {
+    notificationCreatedListeners.delete(listener);
+  };
+};
+
+export const onNotificationUpdated = (listener: NotificationListener): (() => void) => {
+  notificationUpdatedListeners.add(listener);
+  return () => {
+    notificationUpdatedListeners.delete(listener);
+  };
+};
+
+const coerceReadFlag = (value: unknown): boolean => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+    const numeric = Number.parseInt(normalized, 10);
+    if (!Number.isNaN(numeric)) {
+      return numeric !== 0;
+    }
+  }
+  return Boolean(value);
+};
+
+const normalizeNotificationPayload = (payload: NotificationPayload): NotificationItem | null => {
+  if (!payload?.type) {
+    return null;
+  }
+
+  let createdAt = new Date().toISOString();
+  const rawCreatedAt = payload.createdAt;
+  if (typeof rawCreatedAt === 'string') {
+    createdAt = rawCreatedAt;
+  } else if (rawCreatedAt instanceof Date) {
+    createdAt = rawCreatedAt.toISOString();
+  } else if (typeof rawCreatedAt === 'number') {
+    createdAt = new Date(rawCreatedAt).toISOString();
+  }
+
+  return {
+    notificationId: payload.notificationId,
+    type: payload.type,
+    title: payload.title ?? '',
+    message: payload.message ?? '',
+    metadata: payload.metadata ?? null,
+    read: coerceReadFlag(payload.read),
+    createdAt,
+  };
+};
+
+const notifyListeners = (listeners: Set<NotificationListener>, notification: NotificationItem): void => {
+  for (const listener of listeners) {
+    try {
+      listener(notification);
+    } catch (error) {
+      console.error('[socket] notification listener error', error);
+    }
+  }
+};
 

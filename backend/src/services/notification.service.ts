@@ -71,10 +71,27 @@ class NotificationService {
       await notification.save();
     }
 
-    return this.mapNotification(notification.toJSON());
+    const mapped = this.mapNotification(notification.toJSON());
+    eventBus.emit(AppEvent.NOTIFICATION_UPDATED, {
+      userId,
+      notification: mapped,
+    });
+
+    return mapped;
   }
 
   async markAllAsRead(userId: number) {
+    const unreadNotifications = await Notification.findAll({
+      where: {
+        userId,
+        read: false,
+      },
+    });
+
+    if (unreadNotifications.length === 0) {
+      return;
+    }
+
     await Notification.update(
       { read: true },
       {
@@ -84,6 +101,16 @@ class NotificationService {
         },
       }
     );
+
+    await Promise.all(unreadNotifications.map((notification) => notification.reload()));
+
+    for (const notification of unreadNotifications) {
+      const mapped = this.mapNotification(notification.toJSON());
+      eventBus.emit(AppEvent.NOTIFICATION_UPDATED, {
+        userId,
+        notification: mapped,
+      });
+    }
   }
 
   private mapNotification(record: any) {
@@ -93,9 +120,28 @@ class NotificationService {
       title: record.title,
       message: record.message,
       metadata: record.metadata ?? null,
-      read: Boolean(record.read),
+      read: this.toBoolean(record.read),
       createdAt: new Date(record.createdAt),
     };
+  }
+
+  private toBoolean(value: unknown): boolean {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'number') {
+      return value !== 0;
+    }
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === 'true') return true;
+      if (normalized === 'false') return false;
+      const numeric = Number.parseInt(normalized, 10);
+      if (!Number.isNaN(numeric)) {
+        return numeric !== 0;
+      }
+    }
+    return Boolean(value);
   }
 }
 

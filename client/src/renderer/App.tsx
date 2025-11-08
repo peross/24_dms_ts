@@ -18,11 +18,14 @@ interface LoginMessage {
   text: string;
 }
 
-interface NotificationItem {
-  id: string;
+interface NotificationEntry {
+  notificationId: number;
   title: string;
   message: string;
-  timestamp?: string;
+  type: string;
+  metadata?: Record<string, unknown> | null;
+  read: boolean;
+  createdAt: string;
 }
 
 interface AuthStateChangePayload {
@@ -36,6 +39,25 @@ const defaultConfig: ConfigResponse = {};
 type StatusPillProps = Readonly<{ active: boolean }>;
 type ActiveSection = 'my-files' | 'shared' | 'recent' | 'trash';
 type BadgeTone = 'work' | 'personal' | 'shared' | 'documents' | 'images' | 'videos' | 'audio' | 'archives' | 'other';
+
+const coerceReadFlag = (value: any): boolean => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+    const numeric = Number.parseInt(normalized, 10);
+    if (!Number.isNaN(numeric)) {
+      return numeric !== 0;
+    }
+  }
+  return Boolean(value);
+};
 
 function StatusPill({ active }: StatusPillProps) {
   return (
@@ -63,6 +85,28 @@ function mapCategoryToTone(value: string): BadgeTone {
   }
 }
 
+function normalizeNotification(raw: any): NotificationEntry {
+  let createdAt = new Date().toISOString();
+  const rawCreatedAt = raw?.createdAt;
+  if (typeof rawCreatedAt === 'string') {
+    createdAt = rawCreatedAt;
+  } else if (rawCreatedAt instanceof Date) {
+    createdAt = rawCreatedAt.toISOString();
+  } else if (typeof rawCreatedAt === 'number') {
+    createdAt = new Date(rawCreatedAt).toISOString();
+  }
+
+  return {
+    notificationId: Number(raw?.notificationId ?? raw?.id ?? Date.now()),
+    title: raw?.title ? String(raw.title) : '',
+    message: raw?.message ? String(raw.message) : '',
+    type: raw?.type ? String(raw.type) : '',
+    metadata: raw?.metadata ?? null,
+    read: coerceReadFlag(raw?.read),
+    createdAt,
+  };
+}
+
 export default function App(): JSX.Element {
   const [config, setConfig] = useState<ConfigResponse>(defaultConfig);
   const [apiBaseUrl, setApiBaseUrl] = useState('');
@@ -74,6 +118,10 @@ export default function App(): JSX.Element {
   const [loginMessage, setLoginMessage] = useState<LoginMessage | null>(null);
   const [isWorkspaceBusy, setIsWorkspaceBusy] = useState(false);
   const [files, setFiles] = useState<SyncedFileEntry[]>([]);
+  const [notifications, setNotifications] = useState<NotificationEntry[]>([]);
+  const [isNotificationsLoading, setIsNotificationsLoading] = useState(false);
+  const [pendingNotificationIds, setPendingNotificationIds] = useState<number[]>([]);
+  const [isMarkingAllNotifications, setIsMarkingAllNotifications] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeSection, setActiveSection] = useState<ActiveSection>('my-files');
   const [sortOption, setSortOption] = useState<'updated' | 'name' | 'size'>('updated');
@@ -113,15 +161,114 @@ export default function App(): JSX.Element {
     }
   }, [config.syncActive]);
 
+  const applyNotificationUpdate = useCallback((rawNotification: any) => {
+    if (!rawNotification) {
+      return;
+    }
+
+    const normalized = normalizeNotification(rawNotification);
+
+    setNotifications((previous) => {
+      const existingIndex = previous.findIndex((item) => item.notificationId === normalized.notificationId);
+      if (existingIndex !== -1) {
+        const updated = [...previous];
+        updated[existingIndex] = normalized;
+        updated.sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        return updated;
+      }
+
+      const combined = [normalized, ...previous];
+      combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return combined.slice(0, 100);
+    });
+  }, []);
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      setIsNotificationsLoading(true);
+      const response = await globalThis.dmsClient.getNotifications({ limit: 50 });
+      const items = Array.isArray(response?.items) ? response.items : [];
+      const normalized = items.map((item) => normalizeNotification(item));
+      normalized.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setNotifications(normalized);
+    } catch (error) {
+      console.error('Failed to load notifications', error);
+      setNotifications([]);
+    } finally {
+      setIsNotificationsLoading(false);
+    }
+  }, []);
+
+  const handleMarkNotificationRead = useCallback(
+    async (notificationId: number) => {
+      setPendingNotificationIds((previous) =>
+        previous.includes(notificationId) ? previous : [...previous, notificationId]
+      );
+
+      try {
+        const result = await globalThis.dmsClient.markNotificationRead(notificationId);
+        if (result?.success && result.notification) {
+          applyNotificationUpdate(result.notification);
+        } else {
+          setNotifications((previous) =>
+            previous.map((item) =>
+              item.notificationId === notificationId ? { ...item, read: true } : item
+            )
+          );
+        }
+      } catch (error) {
+        console.error('Failed to mark notification as read', error);
+      } finally {
+        setPendingNotificationIds((previous) => previous.filter((id) => id !== notificationId));
+      }
+    },
+    [applyNotificationUpdate]
+  );
+
+  const handleMarkAllNotificationsRead = useCallback(async () => {
+    setIsMarkingAllNotifications(true);
+    try {
+      const result = await globalThis.dmsClient.markAllNotificationsRead();
+      if (result?.success !== false) {
+        setNotifications((previous) => previous.map((item) => ({ ...item, read: true })));
+        setPendingNotificationIds([]);
+      }
+    } catch (error) {
+      console.error('Failed to mark all notifications as read', error);
+    } finally {
+      setIsMarkingAllNotifications(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadConfig();
   }, [loadConfig]);
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setNotifications([]);
+      setIsNotificationsOpen(false);
+       setIsNotificationsLoading(false);
+      setPendingNotificationIds([]);
+      setIsMarkingAllNotifications(false);
+      return;
+    }
+
+    void fetchNotifications();
+  }, [isLoggedIn, fetchNotifications]);
 
   useEffect(() => {
     const unsubscribe = globalThis.dmsClient.onAuthStateChanged?.((payload: AuthStateChangePayload) => {
       void loadConfig();
       if (!payload.isAuthenticated) {
         setFiles([]);
+        setNotifications([]);
+        setIsNotificationsOpen(false);
+        setIsProfileMenuOpen(false);
+        setPendingNotificationIds([]);
+        setIsMarkingAllNotifications(false);
       }
     });
 
@@ -137,6 +284,24 @@ export default function App(): JSX.Element {
       void loadFiles();
     }
   }, [config.syncActive, loadFiles]);
+
+  useEffect(() => {
+    const unsubscribeCreated = globalThis.dmsClient.onNotificationCreated?.((notification: any) => {
+      applyNotificationUpdate(notification);
+    });
+    const unsubscribeUpdated = globalThis.dmsClient.onNotificationUpdated?.((notification: any) => {
+      applyNotificationUpdate(notification);
+    });
+
+    return () => {
+      if (typeof unsubscribeCreated === 'function') {
+        unsubscribeCreated();
+      }
+      if (typeof unsubscribeUpdated === 'function') {
+        unsubscribeUpdated();
+      }
+    };
+  }, [applyNotificationUpdate]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -202,18 +367,23 @@ export default function App(): JSX.Element {
       setTwoFactorToken('');
       setIsSubmittingLogin(false);
       await loadConfig();
+      await fetchNotifications();
     } catch (error: any) {
       const message = error?.response?.data?.error ?? error?.message ?? 'Login failed.';
       setLoginMessage({ type: 'error', text: message });
       setIsSubmittingLogin(false);
     }
-  }, [identifier, password, twoFactorToken, loadConfig]);
+  }, [identifier, password, twoFactorToken, loadConfig, fetchNotifications]);
 
   const handleLogout = useCallback(async () => {
     setIsProfileMenuOpen(false);
     await globalThis.dmsClient.logout();
     await loadConfig();
     setFiles([]);
+    setNotifications([]);
+    setIsNotificationsOpen(false);
+    setPendingNotificationIds([]);
+    setIsMarkingAllNotifications(false);
   }, [loadConfig]);
 
   const handleChooseWorkspace = useCallback(async () => {
@@ -360,16 +530,17 @@ export default function App(): JSX.Element {
     }
   }, []);
 
-  const notifications = useMemo<NotificationItem[]>(() => {
-    return sortedFiles.slice(0, 6).map((file) => ({
-      id: `file-${file.fileId}`,
-      title: 'File updated',
-      message: file.name,
-      timestamp: file.updatedAt ? formatDate(file.updatedAt) : undefined,
-    }));
-  }, [sortedFiles, formatDate]);
+  const unreadNotificationCount = useMemo(
+    () => notifications.filter((notification) => !notification.read).length,
+    [notifications]
+  );
 
+  const notificationBadgeValue = unreadNotificationCount > 99 ? '99+' : `${unreadNotificationCount}`;
   const notificationCount = notifications.length;
+  const isNotificationPending = useCallback(
+    (notificationId: number) => pendingNotificationIds.includes(notificationId),
+    [pendingNotificationIds]
+  );
   const profileName = config.auth?.displayName ?? config.auth?.email ?? 'Account';
   const profileEmail = config.auth?.email ?? '';
   const profileInitial = profileName.trim().charAt(0).toUpperCase() || 'A';
@@ -649,23 +820,76 @@ export default function App(): JSX.Element {
                 aria-label="Notifications"
               >
                 <span aria-hidden="true">🔔</span>
-                {notificationCount > 0 && <span className="notification-badge">{notificationCount}</span>}
+                {unreadNotificationCount > 0 && (
+                  <span className="notification-badge">{notificationBadgeValue}</span>
+                )}
               </button>
               {isNotificationsOpen && (
                 <div className="dropdown notification-dropdown" role="menu">
-                  {notificationCount === 0 ? (
-                    <div className="dropdown__empty">No notifications yet.</div>
-                  ) : (
-                    <ul>
-                      {notifications.map((item) => (
-                        <li key={item.id} className="notification-item">
-                          <div className="notification-item__title">{item.title}</div>
-                          <div className="notification-item__message">{item.message}</div>
-                          {item.timestamp && <time className="notification-item__time">{item.timestamp}</time>}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  <div className="notification-dropdown__header">
+                    <span className="notification-dropdown__title">Notifications</span>
+                    {unreadNotificationCount > 0 && (
+                      <button
+                        type="button"
+                        className="notification-dropdown__mark-all"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          void handleMarkAllNotificationsRead();
+                        }}
+                        disabled={isMarkingAllNotifications}
+                      >
+                        {isMarkingAllNotifications ? 'Marking…' : 'Mark all as read'}
+                      </button>
+                    )}
+                  </div>
+                  {(() => {
+                    if (isNotificationsLoading) {
+                      return <div className="dropdown__empty">Loading notifications…</div>;
+                    }
+
+                    if (notificationCount === 0) {
+                      return <div className="dropdown__empty">No notifications yet.</div>;
+                    }
+
+                    return (
+                      <ul>
+                        {notifications.map((item) => {
+                          const itemClassName = item.read
+                            ? 'notification-item'
+                            : 'notification-item notification-item--unread';
+                          const isPending = isNotificationPending(item.notificationId);
+                          return (
+                            <li key={item.notificationId} className={itemClassName}>
+                              <div className="notification-item__content">
+                                <div className="notification-item__title">{item.title || 'Notification'}</div>
+                                <div className="notification-item__message">{item.message || item.type}</div>
+                                {item.createdAt ? (
+                                  <time className="notification-item__time">{formatDate(item.createdAt)}</time>
+                                ) : null}
+                              </div>
+                              {!item.read && (
+                                <div className="notification-item__actions">
+                                  <button
+                                    type="button"
+                                    className="notification-item__action"
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      void handleMarkNotificationRead(item.notificationId);
+                                    }}
+                                    disabled={isPending || isMarkingAllNotifications}
+                                  >
+                                    {isPending ? 'Marking…' : 'Mark as read'}
+                                  </button>
+                                </div>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    );
+                  })()}
                 </div>
               )}
             </div>

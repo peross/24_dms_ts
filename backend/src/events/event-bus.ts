@@ -8,6 +8,7 @@ export enum AppEvent {
   FILE_UPDATED = 'file.updated',
   FILE_DELETED = 'file.deleted',
   NOTIFICATION_CREATED = 'notification.created',
+  NOTIFICATION_UPDATED = 'notification.updated',
 }
 
 export interface FolderEventData {
