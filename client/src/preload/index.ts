@@ -11,6 +11,7 @@ const api = {
   restartSync: () => ipcRenderer.invoke('sync:restart'),
   listFiles: () => ipcRenderer.invoke('files:list'),
   openWorkspaceFolder: () => ipcRenderer.invoke('workspace:open-folder'),
+  revealWorkspaceItem: (relativePath: string) => ipcRenderer.invoke('workspace:reveal-file', relativePath),
   openWebApp: () => ipcRenderer.invoke('workspace:open-web'),
   getNotifications: (params?: { limit?: number; offset?: number; unreadOnly?: boolean }) =>
     ipcRenderer.invoke('notifications:list', params ?? {}),

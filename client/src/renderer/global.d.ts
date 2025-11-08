@@ -12,6 +12,7 @@ declare global {
       restartSync: () => Promise<any>;
       listFiles: () => Promise<import('../shared/types').SyncedFileEntry[]>;
       openWorkspaceFolder: () => Promise<{ success: boolean; message?: string }>;
+      revealWorkspaceItem: (relativePath: string) => Promise<{ success: boolean; message?: string }>;
       openWebApp: () => Promise<{ success: boolean; message?: string; url?: string }>;
       getNotifications: (
         params?: { limit?: number; offset?: number; unreadOnly?: boolean }

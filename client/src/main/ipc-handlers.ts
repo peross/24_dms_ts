@@ -1,9 +1,11 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { dialog, ipcMain, shell } from 'electron';
 import { configStore } from './config-store';
 import { ensureWorkspaceStructure } from './workspace-manager';
 import { startFileWatcher, stopFileWatcher } from './file-watcher';
 import { authService } from './services/auth-service';
-import { normalizePath } from './utils/path';
+import { normalizePath, isSubPath } from './utils/path';
 import { workspaceSyncService } from './services/workspace-sync-service';
 import { setApiBaseUrl as configureSocketBaseUrl, requestResync } from './services/socket-service';
 import { deriveWebAppUrl } from './utils/url';
@@ -139,6 +141,42 @@ export function registerIpcHandlers(): void {
     }
 
     return { success: true };
+  });
+
+  ipcMain.handle('workspace:reveal-file', async (_event, relativePath: string) => {
+    const workspacePath = configStore.getWorkspacePath();
+    if (!workspacePath) {
+      return { success: false, message: 'Workspace path is not configured yet.' };
+    }
+
+    if (typeof relativePath !== 'string' || relativePath.trim() === '') {
+      return { success: false, message: 'Invalid file path.' };
+    }
+
+    const sanitizedRelativePath = relativePath.replace(/^[/\\]+/, '');
+    const absoluteWorkspacePath = path.resolve(workspacePath);
+    const targetPath = path.resolve(workspacePath, sanitizedRelativePath);
+
+    if (!isSubPath(absoluteWorkspacePath, targetPath)) {
+      return { success: false, message: 'Requested file is outside of the workspace.' };
+    }
+
+    const normalizedTarget = normalizePath(targetPath);
+
+    if (!fs.existsSync(normalizedTarget)) {
+      return { success: false, message: 'File does not exist on disk yet.' };
+    }
+
+    try {
+      shell.showItemInFolder(targetPath);
+      return { success: true };
+    } catch (error: any) {
+      console.error('Failed to reveal workspace file', error);
+      return {
+        success: false,
+        message: error?.message ?? 'Failed to open workspace file location.',
+      };
+    }
   });
 
   ipcMain.handle('workspace:open-web', async () => {
