@@ -12,6 +12,16 @@ const api = {
   listFiles: () => ipcRenderer.invoke('files:list'),
   openWorkspaceFolder: () => ipcRenderer.invoke('workspace:open-folder'),
   openWebApp: () => ipcRenderer.invoke('workspace:open-web'),
+  onAuthStateChanged: (callback: (payload: { isAuthenticated: boolean; email: string | null; displayName: string | null }) => void) => {
+    const channel = 'auth:state-changed';
+    const listener = (_event: Electron.IpcRendererEvent, payload: { isAuthenticated: boolean; email: string | null; displayName: string | null }) => {
+      callback(payload);
+    };
+    ipcRenderer.on(channel, listener);
+    return () => {
+      ipcRenderer.removeListener(channel, listener);
+    };
+  },
 };
 
 contextBridge.exposeInMainWorld('dmsClient', api);

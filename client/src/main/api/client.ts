@@ -45,13 +45,17 @@ class ApiClient {
     this.instance.interceptors.response.use(
       (response) => response,
       async (error) => {
-        if (error.response?.status === 401 && this.refreshHandler && !error.config.__isRetryRequest) {
+        const originalRequest: InternalAxiosRequestConfig & { __isRetryRequest?: boolean } = error.config;
+        const isUnauthorized = error.response?.status === 401;
+        const isRefreshRequest = typeof originalRequest?.url === 'string' && originalRequest.url.includes('/auth/refresh');
+
+        if (isUnauthorized && this.refreshHandler && !originalRequest?.__isRetryRequest && !isRefreshRequest) {
           const token = await this.refreshHandler();
           if (token) {
-            const retryHeaders = AxiosHeaders.from(error.config.headers ?? {});
+            const retryHeaders = AxiosHeaders.from(originalRequest?.headers ?? {});
             retryHeaders.set('Authorization', `Bearer ${token}`);
             const retryConfig: AxiosRequestConfig = {
-              ...error.config,
+              ...originalRequest,
               headers: retryHeaders,
             };
             retryConfig.__isRetryRequest = true;

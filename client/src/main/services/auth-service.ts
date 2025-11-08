@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { apiClient } from '../api/client';
 import { configStore, AuthState } from '../config-store';
 import { normalizeApiBaseUrl } from '../utils/url';
@@ -23,6 +24,23 @@ interface LoginResponse {
 }
 
 class AuthService {
+  private readonly emitter = new EventEmitter();
+
+  getCurrentAuthState(): AuthState | undefined {
+    return configStore.getAuthState();
+  }
+
+  onAuthStateChanged(listener: (state: AuthState | undefined) => void): () => void {
+    this.emitter.on('auth-state-changed', listener);
+    return () => {
+      this.emitter.off('auth-state-changed', listener);
+    };
+  }
+
+  private notifyAuthState(state: AuthState | undefined): void {
+    this.emitter.emit('auth-state-changed', state);
+  }
+
   initialize(apiBaseUrl?: string): void {
     const storedBaseUrl = apiBaseUrl ?? configStore.getApiBaseUrl();
     const normalizedBaseUrl = normalizeApiBaseUrl(storedBaseUrl ?? 'http://localhost:3000/api');
@@ -42,6 +60,7 @@ class AuthService {
     }
 
     apiClient.setRefreshHandler(async () => this.refreshAccessToken());
+    this.notifyAuthState(authState);
   }
 
   setApiBaseUrl(apiBaseUrl: string): void {
@@ -86,6 +105,7 @@ class AuthService {
     apiClient.setAccessToken(accessToken);
     configureSocketAuthToken(accessToken);
     requestResync();
+    this.notifyAuthState(authState);
 
     return {
       success: true,
@@ -114,6 +134,8 @@ class AuthService {
 
       configStore.setAuthState(updated);
       apiClient.setAccessToken(accessToken);
+      configureSocketAuthToken(accessToken);
+      this.notifyAuthState(updated);
 
       return accessToken;
     } catch (error) {
@@ -139,6 +161,7 @@ class AuthService {
     configStore.setAuthState(undefined);
     apiClient.reset();
     disconnectSocket();
+    this.notifyAuthState(undefined);
   }
 }
 

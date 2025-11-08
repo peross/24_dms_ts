@@ -13,6 +13,9 @@ declare global {
       listFiles: () => Promise<import('../shared/types').SyncedFileEntry[]>;
       openWorkspaceFolder: () => Promise<{ success: boolean; message?: string }>;
       openWebApp: () => Promise<{ success: boolean; message?: string; url?: string }>;
+      onAuthStateChanged: (
+        callback: (payload: { isAuthenticated: boolean; email: string | null; displayName: string | null }) => void
+      ) => () => void;
     };
   }
 

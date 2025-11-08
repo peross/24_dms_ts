@@ -3,7 +3,7 @@ import { app, BrowserWindow, shell } from 'electron';
 import path from 'node:path';
 import { registerIpcHandlers } from './ipc-handlers';
 import { authService } from './services/auth-service';
-import { configStore } from './config-store';
+import { configStore, AuthState } from './config-store';
 import { startFileWatcher } from './file-watcher';
 
 const isDev = process.env.NODE_ENV === 'development' || Boolean(process.env.VITE_DEV_SERVER_URL);
@@ -55,10 +55,26 @@ async function createWindow(): Promise<void> {
   });
 }
 
+function broadcastAuthState(state: AuthState | undefined): void {
+  const payload = {
+    isAuthenticated: Boolean(state?.accessToken),
+    email: state?.email ?? null,
+    displayName: state?.displayName ?? null,
+  };
+
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send('auth:state-changed', payload);
+  }
+}
+
 async function bootstrap(): Promise<void> {
   authService.initialize();
+  authService.onAuthStateChanged((state) => {
+    broadcastAuthState(state);
+  });
   registerIpcHandlers();
   await createWindow();
+  broadcastAuthState(authService.getCurrentAuthState());
 
   const workspacePath = configStore.getWorkspacePath();
   const auth = configStore.getAuthState();

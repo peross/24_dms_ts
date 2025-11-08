@@ -59,12 +59,24 @@ export const uploadMiddleware = upload.array('files', 50); // Allow up to 50 fil
 
 export class FileController {
   private serializeFile(file: any) {
+    const systemFolderName = file.folder?.systemFolder?.name;
+    const folderPath = file.folder?.path;
+    const segments: string[] = [];
+    if (systemFolderName) {
+      segments.push(systemFolderName);
+    }
+    if (folderPath) {
+      segments.push(folderPath);
+    }
+    segments.push(file.name);
+    const relativePath = segments.filter(Boolean).join('/');
+
     return {
       fileId: file.fileId,
       name: file.name,
       folderId: file.folderId ?? null,
       systemFolderId: file.folder?.systemFolderId ?? null,
-      path: file.path ?? null,
+      path: relativePath || file.path || file.name || null,
       size: Number(file.size ?? 0),
       mimeType: file.mimeType,
     };

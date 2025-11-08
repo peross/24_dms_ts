@@ -1,6 +1,6 @@
 import { Op } from 'sequelize';
-import path from 'path';
-import fs from 'fs/promises';
+import path from 'node:path';
+import fs from 'node:fs/promises';
 import File from '../models/file.model';
 import FileVersion from '../models/file-version.model';
 import Folder from '../models/folder.model';
@@ -57,12 +57,18 @@ export class FileService {
    */
   async uploadFile(data: CreateFileDto, fileBuffer: Buffer): Promise<File> {
     // Validate folder if provided
+    let targetFolder: Folder | null = null;
     if (data.folderId) {
-      const folder = await Folder.findByPk(data.folderId);
-      if (!folder) {
+      targetFolder = await Folder.findByPk(data.folderId, {
+        include: [{
+          model: SystemFolder,
+          as: 'systemFolder',
+        }],
+      });
+      if (!targetFolder) {
         throw new Error('Folder not found');
       }
-      if (folder.userId !== data.userId) {
+      if (targetFolder.userId !== data.userId) {
         throw new Error('Cannot upload file to another user\'s folder');
       }
 
@@ -87,6 +93,8 @@ export class FileService {
       // Cannot upload root files - must be inside a system folder
       throw new Error('Files must be uploaded to "My Folders" or "General" (admin only)');
     }
+
+    const logicalPath = targetFolder ? `${targetFolder.path}/${data.name}` : data.name;
 
     // Check if file with same name already exists in the same folder
     const whereClause: any = {
@@ -113,13 +121,13 @@ export class FileService {
       file.currentVersion = version;
       file.size = data.size;
       file.mimeType = data.mimeType;
-      file.path = data.path;
+      file.path = logicalPath;
       await file.save();
     } else {
       // Create new file
       file = await File.create({
         name: data.name,
-        path: data.path,
+        path: logicalPath,
         size: data.size,
         mimeType: data.mimeType,
         folderId: data.folderId,
@@ -143,6 +151,17 @@ export class FileService {
       size: data.size,
       mimeType: data.mimeType,
       uploadedBy: data.userId,
+    });
+
+    await file.reload({
+      include: [{
+        model: Folder,
+        as: 'folder',
+        include: [{
+          model: SystemFolder,
+          as: 'systemFolder',
+        }],
+      }],
     });
 
     return file;
@@ -195,6 +214,14 @@ export class FileService {
         fileId,
         userId,
       },
+      include: [{
+        model: Folder,
+        as: 'folder',
+        include: [{
+          model: SystemFolder,
+          as: 'systemFolder',
+        }],
+      }],
     });
 
     if (!file) {
@@ -206,6 +233,11 @@ export class FileService {
     file.currentVersion = version;
     file.size = size;
     file.mimeType = mimeType;
+    if (file.folder) {
+      file.path = `${file.folder.path}/${file.name}`;
+    } else {
+      file.path = file.name;
+    }
     await file.save();
 
     // Save file to disk
@@ -222,6 +254,17 @@ export class FileService {
       size: size,
       mimeType: mimeType,
       uploadedBy: userId,
+    });
+
+    await file.reload({
+      include: [{
+        model: Folder,
+        as: 'folder',
+        include: [{
+          model: SystemFolder,
+          as: 'systemFolder',
+        }],
+      }],
     });
 
     return file;
@@ -286,6 +329,10 @@ export class FileService {
         {
           model: Folder,
           as: 'folder',
+          include: [{
+            model: SystemFolder,
+            as: 'systemFolder',
+          }],
         },
       ],
       order: [['name', 'ASC']],
@@ -304,6 +351,14 @@ export class FileService {
         fileId,
         userId,
       },
+      include: [{
+        model: Folder,
+        as: 'folder',
+        include: [{
+          model: SystemFolder,
+          as: 'systemFolder',
+        }],
+      }],
     });
 
     if (!file) {
@@ -327,6 +382,14 @@ export class FileService {
         fileId,
         userId,
       },
+      include: [{
+        model: Folder,
+        as: 'folder',
+        include: [{
+          model: SystemFolder,
+          as: 'systemFolder',
+        }],
+      }],
     });
 
     if (!file) {
@@ -388,7 +451,35 @@ export class FileService {
     if (data.folderId !== undefined) file.folderId = data.folderId ?? undefined;
     if (data.permissions) file.permissions = data.permissions;
 
+    let folderForPath: Folder | null = null;
+    if (file.folderId) {
+      folderForPath = await Folder.findByPk(file.folderId, {
+        include: [{
+          model: SystemFolder,
+          as: 'systemFolder',
+        }],
+      });
+    }
+
+    if (folderForPath) {
+      file.path = `${folderForPath.path}/${file.name}`;
+    } else {
+      file.path = file.name;
+    }
+
     await file.save();
+
+    await file.reload({
+      include: [{
+        model: Folder,
+        as: 'folder',
+        include: [{
+          model: SystemFolder,
+          as: 'systemFolder',
+        }],
+      }],
+    });
+
     return file;
   }
 
@@ -401,6 +492,14 @@ export class FileService {
         fileId,
         userId,
       },
+      include: [{
+        model: Folder,
+        as: 'folder',
+        include: [{
+          model: SystemFolder,
+          as: 'systemFolder',
+        }],
+      }],
     });
 
     if (!file) {
@@ -421,8 +520,9 @@ export class FileService {
     }
 
     // Delete file record (cascade will delete versions)
+    const deletedFile = file;
     await file.destroy();
-    return file;
+    return deletedFile;
   }
 
   /**
@@ -434,6 +534,14 @@ export class FileService {
       where: {
         fileId,
       },
+      include: [{
+        model: Folder,
+        as: 'folder',
+        include: [{
+          model: SystemFolder,
+          as: 'systemFolder',
+        }],
+      }],
     });
 
     if (!file) {

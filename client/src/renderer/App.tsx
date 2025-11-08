@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SyncedFileEntry } from '../shared/types';
 
 interface ConfigResponse {
@@ -18,27 +18,24 @@ interface LoginMessage {
   text: string;
 }
 
-const defaultConfig: ConfigResponse = {};
-
-type SectionProps = Readonly<{
+interface NotificationItem {
+  id: string;
   title: string;
-  actions?: React.ReactNode;
-  children: React.ReactNode;
-}>;
-
-function Section({ title, actions, children }: SectionProps) {
-  return (
-    <section className="section">
-      <div className="section-header">
-        <h2>{title}</h2>
-        {actions ? <div className="section-actions">{actions}</div> : null}
-      </div>
-      <div className="section-body">{children}</div>
-    </section>
-  );
+  message: string;
+  timestamp?: string;
 }
 
+interface AuthStateChangePayload {
+  isAuthenticated: boolean;
+  email: string | null;
+  displayName: string | null;
+}
+
+const defaultConfig: ConfigResponse = {};
+
 type StatusPillProps = Readonly<{ active: boolean }>;
+type ActiveSection = 'my-files' | 'shared' | 'recent' | 'trash';
+type BadgeTone = 'work' | 'personal' | 'shared' | 'documents' | 'images' | 'videos' | 'audio' | 'archives' | 'other';
 
 function StatusPill({ active }: StatusPillProps) {
   return (
@@ -47,6 +44,23 @@ function StatusPill({ active }: StatusPillProps) {
       {active ? 'Active' : 'Idle'}
     </span>
   );
+}
+
+function mapCategoryToTone(value: string): BadgeTone {
+  switch (value) {
+    case 'images':
+      return 'images';
+    case 'videos':
+      return 'videos';
+    case 'audio':
+      return 'audio';
+    case 'archives':
+      return 'archives';
+    case 'documents':
+      return 'documents';
+    default:
+      return 'other';
+  }
 }
 
 export default function App(): JSX.Element {
@@ -61,6 +75,13 @@ export default function App(): JSX.Element {
   const [isWorkspaceBusy, setIsWorkspaceBusy] = useState(false);
   const [files, setFiles] = useState<SyncedFileEntry[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeSection, setActiveSection] = useState<ActiveSection>('my-files');
+  const [sortOption, setSortOption] = useState<'updated' | 'name' | 'size'>('updated');
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+
+  const notificationRef = useRef<HTMLDivElement | null>(null);
+  const profileRef = useRef<HTMLDivElement | null>(null);
 
   const isLoggedIn = useMemo(() => Boolean(config.auth?.isAuthenticated), [config.auth?.isAuthenticated]);
   const lastSyncedLabel = useMemo(() => {
@@ -97,10 +118,48 @@ export default function App(): JSX.Element {
   }, [loadConfig]);
 
   useEffect(() => {
+    const unsubscribe = globalThis.dmsClient.onAuthStateChanged?.((payload: AuthStateChangePayload) => {
+      void loadConfig();
+      if (!payload.isAuthenticated) {
+        setFiles([]);
+      }
+    });
+
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, [loadConfig]);
+
+  useEffect(() => {
     if (config.syncActive) {
       void loadFiles();
     }
   }, [config.syncActive, loadFiles]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (isNotificationsOpen && notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setIsNotificationsOpen(false);
+      }
+      if (isProfileMenuOpen && profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isNotificationsOpen, isProfileMenuOpen]);
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setIsNotificationsOpen(false);
+      setIsProfileMenuOpen(false);
+    }
+  }, [isLoggedIn]);
 
   const handleSaveApiBaseUrl = useCallback(async () => {
     setIsSavingApiBaseUrl(true);
@@ -151,6 +210,7 @@ export default function App(): JSX.Element {
   }, [identifier, password, twoFactorToken, loadConfig]);
 
   const handleLogout = useCallback(async () => {
+    setIsProfileMenuOpen(false);
     await globalThis.dmsClient.logout();
     await loadConfig();
     setFiles([]);
@@ -210,9 +270,45 @@ export default function App(): JSX.Element {
     );
   }, [sortedFiles, searchTerm]);
 
-  const recentlyUsed = useMemo(() => filteredFiles.slice(0, 4), [filteredFiles]);
-  const recentTableFiles = useMemo(() => filteredFiles.slice(0, 8), [filteredFiles]);
-  const sharedItems = useMemo(() => filteredFiles.slice(4, 7), [filteredFiles]);
+  const sharedFiles = useMemo(
+    () => filteredFiles.filter((file) => (file.systemFolder ?? '').toLowerCase().includes('shared')),
+    [filteredFiles]
+  );
+
+  const recentFiles = useMemo(() => sortedFiles.slice(0, 24), [sortedFiles]);
+
+  const sectionFiles = useMemo(() => {
+    switch (activeSection) {
+      case 'shared':
+        return sharedFiles;
+      case 'recent':
+        return recentFiles;
+      case 'trash':
+        return [];
+      case 'my-files':
+      default:
+        return filteredFiles;
+    }
+  }, [activeSection, filteredFiles, recentFiles, sharedFiles]);
+
+  const sortedSectionFiles = useMemo(() => {
+    const list = [...sectionFiles];
+    switch (sortOption) {
+      case 'name':
+        return list.sort((a, b) => a.name.localeCompare(b.name));
+      case 'size':
+        return list.sort((a, b) => Number(b.size ?? 0) - Number(a.size ?? 0));
+      case 'updated':
+      default:
+        return list.sort((a, b) => {
+          const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+          const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+          return bTime - aTime;
+        });
+    }
+  }, [sectionFiles, sortOption]);
+
+  const displayedFiles = useMemo(() => sortedSectionFiles.slice(0, 12), [sortedSectionFiles]);
 
   const categorizeFile = useCallback((mimeType?: string | null): string => {
     if (!mimeType) return 'Other';
@@ -224,68 +320,21 @@ export default function App(): JSX.Element {
     return 'Documents';
   }, []);
 
-  const categoryStats = useMemo(() => {
-    const map = new Map<string, { label: string; count: number; size: number }>();
-
-    const addCategory = (key: string, label: string, size: number) => {
-      if (!map.has(key)) {
-        map.set(key, { label, count: 0, size: 0 });
-      }
-      const entry = map.get(key)!;
-      entry.count += 1;
-      entry.size += size;
-    };
-
-    for (const file of files) {
-      const key = categorizeFile(file.mimeType);
-      const size = Number(file.size ?? 0);
-      switch (key) {
-        case 'Images':
-          addCategory('images', 'Images', size);
-          break;
-        case 'Videos':
-          addCategory('videos', 'Videos', size);
-          break;
-        case 'Audio':
-          addCategory('audio', 'Audio', size);
-          break;
-        case 'Archives':
-          addCategory('archives', 'Archives', size);
-          break;
-        case 'Documents':
-          addCategory('documents', 'Documents', size);
-          break;
-        default:
-          addCategory('other', 'Other', size);
-      }
+  const emptyStateMessage = useMemo(() => {
+    if (!config.syncActive) {
+      return 'Sync is inactive. Start sync to populate your workspace.';
     }
-
-    const stats = Array.from(map.entries()).map(([key, value]) => ({ key, ...value }));
-    stats.sort((a, b) => b.size - a.size);
-    return stats;
-  }, [files, categorizeFile]);
-
-  const topCategories = useMemo(() => categoryStats.slice(0, 4), [categoryStats]);
-
-  const storageCapacityBytes = 500 * 1024 * 1024 * 1024; // 500 GB
-  const totalSizeBytes = useMemo(() => files.reduce((sum, file) => sum + Number(file.size ?? 0), 0), [files]);
-  const storagePercent = useMemo(() => {
-    if (!storageCapacityBytes) return 0;
-    return Math.min(100, Math.round((totalSizeBytes / storageCapacityBytes) * 100));
-  }, [totalSizeBytes]);
-
-  const formatBytes = useCallback((value: number) => {
-    if (!value) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
-    const formatted = value / Math.pow(1024, index);
-    return `${formatted.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
-  }, []);
-
-  const emptyStateMessage = useMemo(
-    () => (config.syncActive ? 'No files found. Try a different search.' : 'Sync is inactive.'),
-    [config.syncActive]
-  );
+    if (activeSection === 'trash') {
+      return 'Trash is empty.';
+    }
+    if (activeSection === 'shared') {
+      return 'No shared files yet.';
+    }
+    if (displayedFiles.length === 0) {
+      return 'No files match your search.';
+    }
+    return '';
+  }, [activeSection, config.syncActive, displayedFiles.length]);
 
   const workspaceButtonLabel = useMemo(() => {
     if (isWorkspaceBusy) {
@@ -310,6 +359,90 @@ export default function App(): JSX.Element {
       return value;
     }
   }, []);
+
+  const notifications = useMemo<NotificationItem[]>(() => {
+    return sortedFiles.slice(0, 6).map((file) => ({
+      id: `file-${file.fileId}`,
+      title: 'File updated',
+      message: file.name,
+      timestamp: file.updatedAt ? formatDate(file.updatedAt) : undefined,
+    }));
+  }, [sortedFiles, formatDate]);
+
+  const notificationCount = notifications.length;
+  const profileName = config.auth?.displayName ?? config.auth?.email ?? 'Account';
+  const profileEmail = config.auth?.email ?? '';
+  const profileInitial = profileName.trim().charAt(0).toUpperCase() || 'A';
+  const emptyMessage = emptyStateMessage || 'No files to display.';
+  const hasFiles = displayedFiles.length > 0;
+
+  const viewTitle = useMemo(() => {
+    switch (activeSection) {
+      case 'shared':
+        return 'Shared with Me';
+      case 'recent':
+        return 'Recent Files';
+      case 'trash':
+        return 'Trash';
+      case 'my-files':
+      default:
+        return 'My Files';
+    }
+  }, [activeSection]);
+
+  const viewDescription = useMemo(() => {
+    switch (activeSection) {
+      case 'shared':
+        return 'Files and folders that were shared with you from the web platform.';
+      case 'recent':
+        return 'Most recently updated files across your synchronized workspace.';
+      case 'trash':
+        return 'Items removed from your workspace will appear here temporarily.';
+      case 'my-files':
+      default:
+        return 'Keep your desktop workspace mirrored with the web platform in real time.';
+    }
+  }, [activeSection]);
+
+  const getFileIcon = useCallback(
+    (file: SyncedFileEntry) => {
+      const category = categorizeFile(file.mimeType);
+      switch (category) {
+        case 'Images':
+          return '🖼️';
+        case 'Videos':
+          return '🎬';
+        case 'Audio':
+          return '🎧';
+        case 'Archives':
+          return '🗜️';
+        case 'Documents':
+          return '📄';
+        default:
+          return '📁';
+      }
+    },
+    [categorizeFile]
+  );
+
+  const getBadgeInfo = useCallback(
+    (file: SyncedFileEntry): { label: string; tone: BadgeTone } => {
+      const systemFolder = (file.systemFolder ?? '').toLowerCase();
+      if (systemFolder.includes('shared')) {
+        return { label: 'shared', tone: 'shared' };
+      }
+      if (systemFolder.includes('general')) {
+        return { label: 'work', tone: 'work' };
+      }
+      if (systemFolder.includes('my')) {
+        return { label: 'personal', tone: 'personal' };
+      }
+
+      const category = categorizeFile(file.mimeType).toLowerCase();
+      return { label: category, tone: mapCategoryToTone(category) };
+    },
+    [categorizeFile]
+  );
 
   if (!isLoggedIn) {
     return (
@@ -406,187 +539,252 @@ export default function App(): JSX.Element {
     );
   }
 
+  const navigationItems: Array<{ key: ActiveSection; label: string; icon: string }> = [
+    { key: 'my-files', label: 'My Files', icon: '📁' },
+    { key: 'shared', label: 'Shared with Me', icon: '👥' },
+    { key: 'recent', label: 'Recent', icon: '🕒' },
+    { key: 'trash', label: 'Trash', icon: '🗑' },
+  ];
+
+  const sidebarActions = [
+    {
+      label: 'Open Workspace',
+      icon: '📂',
+      onClick: () => handleOpenWorkspace(),
+      disabled: !config.workspacePath,
+    },
+    {
+      label: 'Change Workspace',
+      icon: '🗂️',
+      onClick: () => handleChooseWorkspace(),
+      disabled: isWorkspaceBusy,
+    },
+    {
+      label: 'Restart Sync',
+      icon: '🔄',
+      onClick: () => handleRestartSync(),
+    },
+    {
+      label: 'Open Web App',
+      icon: '🌐',
+      onClick: () => handleOpenWebApp(),
+    },
+  ];
+
   return (
     <div className="app">
       <aside className="sidebar">
         <div className="sidebar__brand">
           <span className="sidebar__logo">S</span>
-          <div>
-            <div className="sidebar__title">SATA UI</div>
-            <div className="sidebar__subtitle">Demo</div>
+          <div className="sidebar__brand-meta">
+            <div className="sidebar__title">SATA Client</div>
+            <div className="sidebar__subtitle">Document Sync</div>
           </div>
         </div>
-        <nav className="sidebar__nav">
-          <button className="sidebar__item" onClick={() => handleOpenWorkspace()}>
-            Open Workspace
-          </button>
-          <button className="sidebar__item" onClick={() => handleOpenWebApp()}>
-            Open Web App
-          </button>
-          <button className="sidebar__item" onClick={() => handleRestartSync()}>
-            Restart Sync
-          </button>
-          <button className="sidebar__item" onClick={() => handleChooseWorkspace()}>
-            Choose Workspace
-          </button>
+
+        <nav className="sidebar__menu" aria-label="Workspace navigation">
+          {navigationItems.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className={`sidebar__menu-item ${activeSection === item.key ? 'is-active' : ''}`}
+              onClick={() => setActiveSection(item.key)}
+            >
+              <span className="sidebar__menu-icon" aria-hidden="true">
+                {item.icon}
+              </span>
+              <span>{item.label}</span>
+            </button>
+          ))}
         </nav>
+
+        <div className="sidebar__actions">
+          {sidebarActions.map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              className="sidebar__action"
+              onClick={action.onClick}
+              disabled={action.disabled}
+            >
+              <span className="sidebar__menu-icon" aria-hidden="true">
+                {action.icon}
+              </span>
+              <span>{action.label}</span>
+            </button>
+          ))}
+        </div>
+
       </aside>
 
       <div className="workspace">
         <header className="workspace__header">
-          <div className="search-bar">
-            <input
-              type="search"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search your files"
-            />
+          <div className="workspace__headline">
+            <h1>{viewTitle}</h1>
+            <p>{viewDescription}</p>
           </div>
-          <StatusPill active={Boolean(config.syncActive)} />
+          <div className="workspace__header-utilities">
+            <div className="workspace__search">
+              <input
+                type="search"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search your files"
+                aria-label="Search files"
+              />
+            </div>
+            <button className="button button--secondary" type="button" onClick={() => handleRestartSync()}>
+              Resync
+            </button>
+            <button className="button button--primary" type="button" onClick={() => handleOpenWebApp()}>
+              Upload
+            </button>
+            <div className="workspace__notifications" ref={notificationRef}>
+              <button
+                type="button"
+                className="icon-button notification-bell"
+                onClick={() => setIsNotificationsOpen((prev) => !prev)}
+                aria-haspopup="true"
+                aria-expanded={isNotificationsOpen}
+                aria-label="Notifications"
+              >
+                <span aria-hidden="true">🔔</span>
+                {notificationCount > 0 && <span className="notification-badge">{notificationCount}</span>}
+              </button>
+              {isNotificationsOpen && (
+                <div className="dropdown notification-dropdown" role="menu">
+                  {notificationCount === 0 ? (
+                    <div className="dropdown__empty">No notifications yet.</div>
+                  ) : (
+                    <ul>
+                      {notifications.map((item) => (
+                        <li key={item.id} className="notification-item">
+                          <div className="notification-item__title">{item.title}</div>
+                          <div className="notification-item__message">{item.message}</div>
+                          {item.timestamp && <time className="notification-item__time">{item.timestamp}</time>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="workspace__profile" ref={profileRef}>
+              <button
+                type="button"
+                className="profile-button"
+                onClick={() => setIsProfileMenuOpen((prev) => !prev)}
+                aria-haspopup="true"
+                aria-expanded={isProfileMenuOpen}
+              >
+                <span className="profile-button__avatar" aria-hidden="true">
+                  {profileInitial}
+                </span>
+                <span className="profile-button__name">{profileName}</span>
+                <span className="profile-button__caret" aria-hidden="true">
+                  ▾
+                </span>
+              </button>
+              {isProfileMenuOpen && (
+                <div className="dropdown profile-dropdown" role="menu">
+                  <div className="profile-dropdown__header">
+                    <strong>{profileName}</strong>
+                    {profileEmail ? <span>{profileEmail}</span> : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsProfileMenuOpen(false);
+                      void handleOpenWorkspace();
+                    }}
+                    disabled={!config.workspacePath}
+                  >
+                    Open Workspace Folder
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsProfileMenuOpen(false);
+                      void handleOpenWebApp();
+                    }}
+                  >
+                    Open Web App
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleLogout();
+                    }}
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </header>
 
-        <div className="app-content">
-          <div className="workspace__main">
-            <main className="workspace__content">
-              <Section title="Recently Used">
-                {recentlyUsed.length === 0 ? (
-                  <div className="empty-state">No files yet.</div>
-                ) : (
-                  <div className="recent-grid">
-                    {recentlyUsed.map((file) => {
-                      const category = categorizeFile(file.mimeType);
-                      return (
-                        <div key={file.fileId} className="recent-card">
-                          <div className={`recent-card__icon recent-card__icon--${category.toLowerCase()}`}>
-                            {category === 'Documents' && '📄'}
-                            {category === 'Images' && '🖼️'}
-                            {category === 'Videos' && '🎬'}
-                            {category === 'Audio' && '🎧'}
-                            {category === 'Archives' && '🗜️'}
-                            {category === 'Other' && '📁'}
-                          </div>
-                          <div className="recent-card__title">{file.name}</div>
-                          <div className="recent-card__meta">Updated {formatDate(file.updatedAt)}</div>
-                          <div className="recent-card__path">{file.relativePath}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </Section>
-
-              <Section title="Recent Files" actions={<span className="table-count">{filteredFiles.length} files</span>}>
-                <div className="file-table-container">
-                  {recentTableFiles.length === 0 ? (
-                    <div className="empty-state">{emptyStateMessage}</div>
-                  ) : (
-                    <table className="file-table">
-                      <thead>
-                        <tr>
-                          <th>Name</th>
-                          <th>System Folder</th>
-                          <th>Location</th>
-                          <th>Size</th>
-                          <th>Updated</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {recentTableFiles.map((file) => (
-                          <tr key={file.fileId}>
-                            <td>{file.name}</td>
-                            <td>{file.systemFolder ?? 'My Folders'}</td>
-                            <td>{file.relativePath}</td>
-                            <td>{formatSize(file.size)}</td>
-                            <td>{formatDate(file.updatedAt)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              </Section>
-
-              <Section title="Shared with me">
-                {sharedItems.length === 0 ? (
-                  <div className="empty-state">No shared files yet.</div>
-                ) : (
-                  <div className="recent-grid shared-grid">
-                    {sharedItems.map((file) => (
-                      <div key={file.fileId} className="shared-card">
-                        <div className="shared-card__title">{file.name}</div>
-                        <div className="shared-card__meta">{formatDate(file.updatedAt)}</div>
-                        <div className="shared-card__path">{file.relativePath}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Section>
-            </main>
-
-            <aside className="workspace__summary">
-              <div className="summary-card">
-                <div className="summary-card__header">
-                  <h3>Storage</h3>
-                  <span className="summary-card__hint">{formatBytes(totalSizeBytes)} of {formatBytes(storageCapacityBytes)}</span>
-                </div>
-                <div className="storage-chart">
-                  <div className="storage-chart__ring" style={{ background: `conic-gradient(#6366f1 ${storagePercent}%, #e2e8f0 0)` }}>
-                    <div className="storage-chart__inner">{storagePercent}%</div>
-                  </div>
-                  <div className="storage-chart__details">
-                    <div className="storage-chart__value">{formatBytes(totalSizeBytes)} used</div>
-                    <div className="storage-chart__subtitle">{files.length} files</div>
-                  </div>
-                </div>
-                <ul className="storage-list">
-                  {topCategories.length === 0 ? (
-                    <li className="storage-list__item">No files yet.</li>
-                  ) : (
-                    topCategories.map((category) => (
-                      <li key={category.key} className="storage-list__item">
-                        <span className={`storage-dot storage-dot--${category.key}`} />
-                        <span className="storage-list__label">{category.label}</span>
-                        <span className="storage-list__value">{formatBytes(category.size)}</span>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </div>
-
-              <div className="summary-card">
-                <div className="summary-card__header">
-                  <h3>Workspace</h3>
-                  <StatusPill active={Boolean(config.syncActive)} />
-                </div>
-                <div className="summary-item">
-                  <span className="summary-label">Location</span>
-                  <span className="summary-value">{config.workspacePath ?? 'Not selected yet'}</span>
-                </div>
-                <div className="summary-actions">
-                  <button onClick={() => handleChooseWorkspace()} disabled={isWorkspaceBusy}>
-                    {workspaceButtonLabel}
-                  </button>
-                  <button className="ghost" onClick={() => handleOpenWorkspace()}>
-                    Open Folder
-                  </button>
-                </div>
-              </div>
-
-              <div className="summary-card">
-                <div className="summary-card__header">
-                  <h3>Account</h3>
-                </div>
-                <div className="summary-item">
-                  <span className="summary-label">Signed in as</span>
-                  <span className="summary-value">{config.auth?.displayName ?? config.auth?.email}</span>
-                </div>
-                <button className="ghost" onClick={() => handleLogout()}>
-                  Logout
-                </button>
-              </div>
-            </aside>
+        <div className="workspace__toolbar">
+          <div className="workspace__sort">
+            <label htmlFor="sort-option">Sort by</label>
+            <select
+              id="sort-option"
+              value={sortOption}
+              onChange={(event) => setSortOption(event.target.value as typeof sortOption)}
+            >
+              <option value="updated">Last updated</option>
+              <option value="name">Name</option>
+              <option value="size">Size</option>
+            </select>
+          </div>
+          <div />
+          <div className="workspace__sync">
+            <StatusPill active={Boolean(config.syncActive)} />
+            <span className="workspace__sync-label">Last sync {lastSyncedLabel}</span>
           </div>
         </div>
+
+        <main className="workspace__body">
+          {!hasFiles && <div className="workspace__empty">{emptyMessage}</div>}
+          {hasFiles && (
+            <div className="file-list">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Badge</th>
+                    <th>Location</th>
+                    <th>Size</th>
+                    <th>Updated</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayedFiles.map((file) => {
+                    const badge = getBadgeInfo(file);
+                    return (
+                      <tr key={file.fileId}>
+                        <td>
+                          <div className="file-list__name">
+                            <span className="file-list__icon" aria-hidden="true">
+                              {getFileIcon(file)}
+                            </span>
+                            {file.name}
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`file-card__badge file-card__badge--${badge.tone}`}>{badge.label}</span>
+                        </td>
+                        <td>{file.relativePath}</td>
+                        <td>{formatSize(Number(file.size ?? 0))}</td>
+                        <td>{file.updatedAt ? formatDate(file.updatedAt) : 'Not synced yet'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </main>
 
         <footer className="status-bar">
           <div className="status-bar__item">
