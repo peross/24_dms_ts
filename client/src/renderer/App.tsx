@@ -175,6 +175,10 @@ export default function App(): JSX.Element {
   }, [config.lastSyncedAt]);
 
   const loadConfig = useCallback(async () => {
+    if (!globalThis.dmsClient?.getConfig) {
+      console.warn('dmsClient API unavailable; skipping loadConfig.');
+      return;
+    }
     const response = await globalThis.dmsClient.getConfig();
     setConfig(response);
     setApiBaseUrl(response.apiBaseUrl ?? 'http://localhost:3000/api');
@@ -182,6 +186,12 @@ export default function App(): JSX.Element {
 
   const loadFiles = useCallback(async () => {
     if (!config.syncActive) {
+      setFiles([]);
+      return;
+    }
+
+    if (!globalThis.dmsClient?.listFiles) {
+      console.warn('dmsClient listFiles unavailable; skipping loadFiles.');
       setFiles([]);
       return;
     }
@@ -205,7 +215,7 @@ export default function App(): JSX.Element {
   }, [config.syncActive, loadFiles]);
 
   useEffect(() => {
-    const unsubscribe = globalThis.dmsClient.onAuthStateChanged?.((payload: AuthStateChangePayload) => {
+    const handler = (payload: AuthStateChangePayload) => {
       void loadConfig();
       if (!payload.isAuthenticated) {
         setFiles([]);
@@ -213,7 +223,12 @@ export default function App(): JSX.Element {
         setIsSettingsOpen(false);
         setIsSidebarCollapsed(true);
       }
-    });
+    };
+
+    const unsubscribe =
+      globalThis.dmsClient?.onAuthStateChanged?.((payload: AuthStateChangePayload) => {
+        handler(payload);
+      }) ?? null;
 
     return () => {
       if (typeof unsubscribe === 'function') {
@@ -246,6 +261,10 @@ export default function App(): JSX.Element {
   const handleSaveApiBaseUrl = useCallback(async () => {
     setIsSavingApiBaseUrl(true);
     try {
+      if (!globalThis.dmsClient?.setApiBaseUrl) {
+        console.warn('dmsClient setApiBaseUrl unavailable.');
+        return;
+      }
       const response = await globalThis.dmsClient.setApiBaseUrl(apiBaseUrl);
       setConfig((prev) => ({ ...prev, apiBaseUrl: response.apiBaseUrl }));
     } finally {
@@ -263,6 +282,11 @@ export default function App(): JSX.Element {
     setLoginMessage(null);
 
     try {
+      if (!globalThis.dmsClient?.login) {
+        setLoginMessage({ type: 'error', text: 'Login is unavailable in this environment.' });
+        setIsSubmittingLogin(false);
+        return;
+      }
       const result = await globalThis.dmsClient.login({ identifier, password, twoFactorToken: twoFactorToken || undefined });
       if (result.requiresTwoFactor) {
         setLoginMessage({
@@ -295,12 +319,20 @@ export default function App(): JSX.Element {
     setIsProfileMenuOpen(false);
     setIsSettingsOpen(false);
     setIsSidebarCollapsed(true);
+    if (!globalThis.dmsClient?.logout) {
+      console.warn('dmsClient logout unavailable.');
+      return;
+    }
     await globalThis.dmsClient.logout();
     await loadConfig();
     setFiles([]);
   }, [loadConfig]);
 
   const handleChooseWorkspace = useCallback(async () => {
+    if (!globalThis.dmsClient?.chooseWorkspace || !globalThis.dmsClient?.setWorkspace) {
+      console.warn('dmsClient workspace APIs unavailable.');
+      return;
+    }
     setIsWorkspaceBusy(true);
     try {
       const selectedPath = await globalThis.dmsClient.chooseWorkspace();
@@ -316,6 +348,10 @@ export default function App(): JSX.Element {
   }, [loadConfig]);
 
   const handleRestartSync = useCallback(async () => {
+    if (!globalThis.dmsClient?.restartSync) {
+      console.warn('dmsClient restartSync unavailable.');
+      return;
+    }
     const result = await globalThis.dmsClient.restartSync();
     setConfig((prev) => ({ ...prev, syncActive: result.syncActive }));
     await loadConfig();
@@ -323,6 +359,10 @@ export default function App(): JSX.Element {
   }, [loadConfig, loadFiles]);
 
   const handleOpenWorkspace = useCallback(async () => {
+    if (!globalThis.dmsClient?.openWorkspaceFolder) {
+      console.warn('dmsClient openWorkspaceFolder unavailable.');
+      return;
+    }
     const result = await globalThis.dmsClient.openWorkspaceFolder();
     if (!result.success && result.message) {
       console.error(result.message);
@@ -337,6 +377,10 @@ export default function App(): JSX.Element {
     const target = file.relativePath || file.name;
 
     try {
+      if (!globalThis.dmsClient?.revealWorkspaceItem) {
+        console.warn('dmsClient revealWorkspaceItem unavailable.');
+        return;
+      }
       const result = await globalThis.dmsClient.revealWorkspaceItem(target);
       if (!result?.success && result?.message) {
         console.error(result.message);
@@ -347,6 +391,10 @@ export default function App(): JSX.Element {
   }, []);
 
   const handleOpenWebApp = useCallback(async () => {
+    if (!globalThis.dmsClient?.openWebApp) {
+      console.warn('dmsClient openWebApp unavailable.');
+      return;
+    }
     const result = await globalThis.dmsClient.openWebApp();
     if (!result.success && result.message) {
       console.error(result.message);
@@ -358,6 +406,11 @@ export default function App(): JSX.Element {
     setScannerError(null);
     setScanStatusMessage(null);
     try {
+      if (!globalThis.dmsClient?.listScanners) {
+        console.warn('dmsClient listScanners unavailable.');
+        setScanners([]);
+        return;
+      }
       const result = await globalThis.dmsClient.listScanners();
       setScanners(result);
       setSelectedScannerId((previous) => {
@@ -424,6 +477,11 @@ export default function App(): JSX.Element {
     );
 
     try {
+      if (!globalThis.dmsClient?.startScan) {
+        setScannerError('Scanning not supported in this environment.');
+        setIsStartingScan(false);
+        return;
+      }
       const result = await globalThis.dmsClient.startScan(selectedScannerId, { mode: scanMode });
       if (!result?.success) {
         setScannerError(result?.error ?? 'Failed to start scan.');
@@ -488,6 +546,11 @@ export default function App(): JSX.Element {
     setScanStatusMessage(t('scanner.scanningMulti'));
 
     try {
+      if (!globalThis.dmsClient?.appendScanPages) {
+        setScannerError('Scanning not supported in this environment.');
+        setIsAppendingScan(false);
+        return;
+      }
       const result = await globalThis.dmsClient.appendScanPages(scanSessionId);
       if (!result?.success) {
         setScannerError(result?.error ?? t('scanner.noAdditional'));
@@ -517,6 +580,10 @@ export default function App(): JSX.Element {
   }, [scanSessionId]);
 
   const handleChooseScanSaveLocation = useCallback(async () => {
+    if (!globalThis.dmsClient?.chooseScanSaveLocation) {
+      console.warn('dmsClient chooseScanSaveLocation unavailable.');
+      return;
+    }
     const result = await globalThis.dmsClient.chooseScanSaveLocation({
       directory: scanSaveDirectory,
       fileName: normalizePdfFileName(scanFileName),
@@ -546,6 +613,12 @@ export default function App(): JSX.Element {
     setScanStatusMessage(t('scanner.saveStatus'));
 
     try {
+      if (!globalThis.dmsClient?.saveScanSession) {
+        setScannerError('Saving scans is unavailable in this environment.');
+        setScanStatusMessage(null);
+        setIsSavingScan(false);
+        return;
+      }
       const result = await globalThis.dmsClient.saveScanSession({
         sessionId: scanSessionId,
         directory: scanSaveDirectory,
@@ -580,7 +653,7 @@ export default function App(): JSX.Element {
       return;
     }
 
-    void globalThis.dmsClient.discardScanSession(scanSessionId);
+    globalThis.dmsClient?.discardScanSession?.(scanSessionId);
     resetScanSessionState();
     setScanStatusMessage(t('scanner.sessionDiscarded'));
   }, [resetScanSessionState, scanSessionId]);
@@ -591,7 +664,7 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     if (scanMode === 'single' && scanSessionId) {
-      void globalThis.dmsClient.discardScanSession(scanSessionId);
+      globalThis.dmsClient?.discardScanSession?.(scanSessionId);
       resetScanSessionState();
     }
   }, [scanMode, scanSessionId, resetScanSessionState]);
