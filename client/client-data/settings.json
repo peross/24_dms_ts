@@ -1,14 +1,14 @@
 {
 	"folderMappings": {
-		"/home/pero/Documents/dms/General/test": 68,
 		"/home/pero/Documents/dms/My Folders": 2,
 		"/home/pero/Documents/dms/General/proba": 67,
-		"/home/pero/Documents/dms/My Folders/testni": 70
+		"/home/pero/Documents/dms/My Folders/testni": 70,
+		"/home/pero/Documents/dms/General/test": 68
 	},
 	"workspacePath": "/home/pero/Documents/dms",
 	"apiBaseUrl": "http://localhost:3000/api",
 	"auth": {
-		"accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjMsImVtYWlsIjoic3VwZXJhZG1pbkBkZW1vLmNvbSIsInJvbGVzIjpbInN1cGVyX2FkbWluIl0sImlhdCI6MTc2Mjc4MzcxMCwiZXhwIjoxNzYyNzg0NjEwfQ.A5uR1MtmK6LkmauMy2u3PhXdp4uMJ_-blLo--BzKDZc",
+		"accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjMsImVtYWlsIjoic3VwZXJhZG1pbkBkZW1vLmNvbSIsInJvbGVzIjpbInN1cGVyX2FkbWluIl0sImlhdCI6MTc2Mjc4NTE1MSwiZXhwIjoxNzYyNzg2MDUxfQ.mG4QubQ_uVkFrWbqylnaIsc3eMvvNbH8NrY9tItew64",
 		"userId": 3,
 		"email": "superadmin@demo.com",
 		"displayName": "Super Admin"

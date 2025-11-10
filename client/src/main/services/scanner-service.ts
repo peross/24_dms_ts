@@ -594,34 +594,20 @@ async function createPdfFromImages(pages: SessionPage[], targetPath: string, rot
     }
 
     const format = detectImageFormat(file, page.fileName);
-    if (format === 'unknown') {
-      console.warn(`Skipping scanned page ${page.fileName}: unsupported image format.`);
-      continue;
-    }
-
     const extension = path.extname(page.fileName).toLowerCase();
     let image;
     try {
-      if (format === 'jpeg' || extension === '.jpg' || extension === '.jpeg') {
+      if (format === 'png') {
+        image = await pdfDoc.embedPng(file);
+      } else if (format === 'jpeg' || extension === '.jpg' || extension === '.jpeg') {
         image = await pdfDoc.embedJpg(file);
       } else {
-        image = await pdfDoc.embedPng(file);
+        const pngBuffer = await convertBufferToPng(file);
+        image = await pdfDoc.embedPng(pngBuffer);
       }
     } catch (error) {
-      if (format === 'png') {
-        console.warn(`Failed to embed PNG for ${page.fileName}.`, error);
-      }
-      if (format !== 'jpeg') {
-        try {
-          image = await pdfDoc.embedJpg(file);
-        } catch (jpegError) {
-          console.error(`Failed to embed image ${page.fileName} as PNG and JPEG.`, jpegError);
-          continue;
-        }
-      } else {
-        console.error(`Failed to embed JPEG image ${page.fileName}.`, error);
-        continue;
-      }
+      console.error(`Failed to embed image ${page.fileName}.`, error);
+      continue;
     }
 
     const userRotation = normalizeRotation(rotations[page.id] ?? 0);
@@ -693,6 +679,11 @@ function detectImageFormat(buffer: Buffer, fileName: string): 'png' | 'jpeg' | '
   }
   console.warn(`Unknown image signature for scanned page ${fileName}`);
   return 'unknown';
+}
+
+async function convertBufferToPng(buffer: Buffer): Promise<Buffer> {
+  const sharpModule = await import('sharp');
+  return sharpModule.default(buffer).png().toBuffer();
 }
 
 async function normalizeImageToPng(filePath: string): Promise<void> {
