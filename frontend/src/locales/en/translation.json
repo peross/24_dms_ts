@@ -128,7 +128,7 @@
     "viewProfile": "View Profile"
   },
   "header": {
-    "addFile": "Add file",
+    "startScanning": "Start scanning",
     "addFolder": "Add folder",
     "upload": "Upload",
     "copy": "Copy",
@@ -195,7 +195,26 @@
     "referenceTables": "Reference Tables",
     "users": "Users",
     "roles": "Roles",
-    "userRoles": "User Roles"
+    "userRoles": "User Roles",
+    "scanning": "Scanning"
+  },
+  "scanning": {
+    "title": "Scanning",
+    "description": "Select an available scanner to begin capturing documents directly into the system.",
+    "refresh": "Refresh",
+    "loading": "Loading scanners...",
+    "noScannersTitle": "No scanners detected",
+    "noScannersDescription": "We couldn't find any active scanners. Make sure scanners are connected and powered on, then refresh.",
+    "manufacturer": "Manufacturer",
+    "lastUsed": "Last used: {{date}}",
+    "start": "Start scanning",
+    "scanStarted": "Scan started on {{name}}",
+    "failedToStart": "Failed to start scanning",
+    "status": {
+      "idle": "Ready",
+      "busy": "In progress",
+      "offline": "Offline"
+    }
   },
   "dashboard": {
     "welcome": "Welcome to your Document Management System",

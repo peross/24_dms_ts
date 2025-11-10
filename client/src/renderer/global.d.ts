@@ -14,6 +14,34 @@ declare global {
       openWorkspaceFolder: () => Promise<{ success: boolean; message?: string }>;
       revealWorkspaceItem: (relativePath: string) => Promise<{ success: boolean; message?: string }>;
       openWebApp: () => Promise<{ success: boolean; message?: string; url?: string }>;
+      listScanners: () => Promise<Array<{ id: string; name: string; status: string; source: string }>>;
+      startScan: (
+        scannerId: string,
+        options?: { mode?: 'single' | 'multi' }
+      ) => Promise<{
+        success: boolean;
+        error?: string;
+        filePath?: string;
+        session?: {
+          id: string;
+          pages: Array<{ id: string; fileName: string; dataUrl: string }>;
+          suggestedFilePath: string;
+          defaultFileName: string;
+        };
+      }>;
+      appendScanPages: (
+        sessionId: string
+      ) => Promise<{ success: boolean; error?: string; pages?: Array<{ id: string; fileName: string; dataUrl: string }> }>;
+      saveScanSession: (payload: {
+        sessionId: string;
+        directory: string;
+        fileName: string;
+        pages: Array<{ id: string; rotation?: number }>;
+      }) => Promise<{ success: boolean; error?: string; filePath?: string }>;
+      discardScanSession: (sessionId: string) => Promise<{ success: boolean }>;
+      chooseScanSaveLocation: (
+        payload: { directory: string; fileName: string }
+      ) => Promise<{ directory: string; fileName: string } | null>;
       getNotifications: (
         params?: { limit?: number; offset?: number; unreadOnly?: boolean }
       ) => Promise<{ total: number; items: Array<Record<string, any>>; error?: string }>;

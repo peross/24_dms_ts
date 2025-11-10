@@ -15,6 +15,14 @@ import {
   markAllNotificationsAsRead,
   NotificationListParams,
 } from './services/notification-service';
+import {
+  appendScanPages,
+  chooseScanSaveLocation,
+  discardSession as discardScanSession,
+  listScanners,
+  saveScanSession,
+  startScan as startScannerSession,
+} from './services/scanner-service';
 
 function isSyncReady(): boolean {
   return Boolean(configStore.getWorkspacePath() && configStore.getAuthState()?.accessToken);
@@ -239,5 +247,77 @@ export function registerIpcHandlers(): void {
       };
     }
   });
+
+  ipcMain.handle('scanner:list', async () => {
+    try {
+      return await listScanners();
+    } catch (error) {
+      console.error('Failed to list scanners', error);
+      return [];
+    }
+  });
+
+  ipcMain.handle('scanner:start', async (_event, payload: { scannerId: string; options?: { mode?: 'single' | 'multi' } }) => {
+    const scannerId = payload?.scannerId;
+    if (typeof scannerId !== 'string' || scannerId.trim() === '') {
+      return { success: false, error: 'Scanner id is required.' };
+    }
+
+    const workspacePath = configStore.getWorkspacePath();
+    if (!workspacePath) {
+      return { success: false, error: 'Workspace path is not configured yet.' };
+    }
+
+    const result = await startScannerSession(scannerId, workspacePath, payload?.options);
+    return result;
+  });
+
+  ipcMain.handle('scanner:append', async (_event, sessionId: string) => {
+    if (typeof sessionId !== 'string' || sessionId.trim() === '') {
+      return { success: false, error: 'Scan session id is required.' };
+    }
+
+    return appendScanPages(sessionId);
+  });
+
+  ipcMain.handle(
+    'scanner:save-session',
+    async (
+      _event,
+      payload: {
+        sessionId: string;
+        directory: string;
+        fileName: string;
+        pages: Array<{ id: string; rotation?: number }>;
+      }
+    ) => {
+      if (typeof payload?.sessionId !== 'string' || payload.sessionId.trim() === '') {
+        return { success: false, error: 'Scan session id is required.' };
+      }
+
+      return saveScanSession({
+        sessionId: payload.sessionId,
+        directory: payload.directory,
+        fileName: payload.fileName,
+        pages: payload.pages,
+      });
+    }
+  );
+
+  ipcMain.handle('scanner:discard-session', async (_event, sessionId: string) => {
+    if (typeof sessionId !== 'string' || sessionId.trim() === '') {
+      return { success: false, error: 'Scan session id is required.' };
+    }
+
+    await discardScanSession(sessionId);
+    return { success: true };
+  });
+
+  ipcMain.handle(
+    'scanner:choose-save-path',
+    async (_event, payload: { directory: string; fileName: string }) => {
+      return chooseScanSaveLocation(payload?.directory ?? '', payload?.fileName ?? 'scan.pdf');
+    }
+  );
 }
 

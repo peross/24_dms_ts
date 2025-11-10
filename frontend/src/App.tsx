@@ -15,6 +15,7 @@ import { AdminUsers } from "./pages/admin/Users";
 import { AdminRoles } from "./pages/admin/Roles";
 import { AdminUserRoles } from "./pages/admin/UserRoles";
 import { FileViewer } from "./pages/FileViewer";
+import { Scanning } from "./pages/Scanning";
 
 function App() {
   return (
@@ -140,6 +141,16 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <AdminUserRoles />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/scanning"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Scanning />
                 </Layout>
               </ProtectedRoute>
             }

@@ -25,6 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import type { SystemFolderType } from "@/lib/api/folder.api"
 
 export type ViewMode = "grid" | "list"
 
@@ -71,6 +72,20 @@ function findSystemFolderById(folders: FolderTreeNode[], folderId: number): bool
     }
   }
   return false
+}
+
+function getSystemFolderIdFromType(systemFolderType?: SystemFolderType | null): number | undefined {
+  if (!systemFolderType) return undefined
+  switch (systemFolderType) {
+    case "GENERAL":
+      return 1
+    case "MY_FOLDERS":
+      return 2
+    case "SHARED_WITH_ME":
+      return 3
+    default:
+      return undefined
+  }
 }
 
 export function FileList({ viewMode }: FileListProps) {
@@ -158,7 +173,8 @@ export function FileList({ viewMode }: FileListProps) {
   // Context menu handlers
   const handleOpen = (item: FileItem) => {
     if (item.type === "folder") {
-      navigateToFolder(item.id)
+      const systemFolderId = getSystemFolderIdFromType(item.systemFolderType)
+      navigateToFolder(item.id, systemFolderId)
     } else if (item.type === "file") {
       // Navigate to file viewer page and add to history
       // Get current folder context for the file URL

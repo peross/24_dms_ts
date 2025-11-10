@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as Select from '@radix-ui/react-select';
 import type { SyncedFileEntry } from '../shared/types';
 
 interface ConfigResponse {
@@ -55,6 +56,31 @@ function mapCategoryToTone(value: string): BadgeTone {
   }
 }
 
+function splitPath(value: string): { directory: string; fileName: string } {
+  if (!value) {
+    return { directory: '', fileName: '' };
+  }
+
+  const normalized = value.replace(/\\/g, '/');
+  const lastSlash = normalized.lastIndexOf('/');
+
+  if (lastSlash === -1) {
+    return { directory: '', fileName: value };
+  }
+
+  return {
+    directory: value.slice(0, lastSlash),
+    fileName: value.slice(lastSlash + 1),
+  };
+}
+
+function normalizePdfFileName(value: string): string {
+  if (!value) {
+    return 'scan.pdf';
+  }
+  return value.toLowerCase().endsWith('.pdf') ? value : `${value}.pdf`;
+}
+
 export default function App(): JSX.Element {
   const [config, setConfig] = useState<ConfigResponse>(defaultConfig);
   const [apiBaseUrl, setApiBaseUrl] = useState('');
@@ -71,6 +97,43 @@ export default function App(): JSX.Element {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
+  const [scanners, setScanners] = useState<Array<{ id: string; name: string; status: string; source: string }>>([]);
+  const [selectedScannerId, setSelectedScannerId] = useState('');
+  const [isLoadingScanners, setIsLoadingScanners] = useState(false);
+  const [isStartingScan, setIsStartingScan] = useState(false);
+  const [scannerError, setScannerError] = useState<string | null>(null);
+  const [scanStatusMessage, setScanStatusMessage] = useState<string | null>(null);
+  const [scanMode, setScanMode] = useState<'single' | 'multi'>('single');
+  const [scanSessionId, setScanSessionId] = useState<string | null>(null);
+  const [scanPages, setScanPages] = useState<Array<{ id: string; fileName: string; dataUrl: string; rotation: number }>>([]);
+  const [scanSaveDirectory, setScanSaveDirectory] = useState('');
+  const [scanFileName, setScanFileName] = useState('');
+  const [isAppendingScan, setIsAppendingScan] = useState(false);
+  const [isSavingScan, setIsSavingScan] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const selectedScanner = useMemo(
+    () => scanners.find((scanner) => scanner.id === selectedScannerId) ?? null,
+    [scanners, selectedScannerId]
+  );
+  const scanDestinationLabel = useMemo(() => {
+    if (scanSaveDirectory) {
+      return scanSaveDirectory;
+    }
+    if (config.workspacePath) {
+      return `${config.workspacePath}/Scans`;
+    }
+    return 'Default scans folder';
+  }, [scanSaveDirectory, config.workspacePath]);
+  const resetScanSessionState = useCallback(() => {
+    setScanSessionId(null);
+    setScanPages([]);
+    setScanSaveDirectory('');
+    setScanFileName('');
+    setIsAppendingScan(false);
+    setIsSavingScan(false);
+    setIsPreviewOpen(false);
+  }, []);
 
   const profileRef = useRef<HTMLDivElement | null>(null);
 
@@ -263,6 +326,249 @@ export default function App(): JSX.Element {
     }
   }, []);
 
+  const loadScanners = useCallback(async () => {
+    setIsLoadingScanners(true);
+    setScannerError(null);
+    setScanStatusMessage(null);
+    try {
+      const result = await globalThis.dmsClient.listScanners();
+      setScanners(result);
+      setSelectedScannerId((previous) => {
+        if (previous && result.some((scanner) => scanner.id === previous)) {
+          return previous;
+        }
+        return result[0]?.id ?? '';
+      });
+    } catch (error) {
+      console.error('Failed to load scanners', error);
+      const message = (error as { message?: string } | null)?.message ?? 'Failed to load scanners.';
+      setScannerError(message);
+    } finally {
+      setIsLoadingScanners(false);
+    }
+  }, []);
+
+  const handleOpenScannerModal = useCallback(() => {
+    setIsScannerModalOpen(true);
+    setScannerError(null);
+    setScanStatusMessage(null);
+    resetScanSessionState();
+    setScanMode('single');
+    void loadScanners();
+  }, [loadScanners, resetScanSessionState]);
+
+  const handleCloseScannerModal = useCallback(() => {
+    if (scanSessionId) {
+      void globalThis.dmsClient.discardScanSession(scanSessionId);
+    }
+    setIsScannerModalOpen(false);
+    setScanners([]);
+    setSelectedScannerId('');
+    setIsLoadingScanners(false);
+    setIsStartingScan(false);
+    setScannerError(null);
+    setScanStatusMessage(null);
+    setScanMode('single');
+    resetScanSessionState();
+  }, [resetScanSessionState, scanSessionId]);
+
+  const handleRefreshScanners = useCallback(() => {
+    setScanStatusMessage(null);
+    void loadScanners();
+  }, [loadScanners]);
+
+  const handleStartScan = useCallback(async () => {
+    if (!selectedScannerId) {
+      setScannerError('Please choose a scanner to continue.');
+      return;
+    }
+
+    if (scanMode === 'multi' && scanSessionId) {
+      void globalThis.dmsClient.discardScanSession(scanSessionId);
+      resetScanSessionState();
+    }
+
+    setIsStartingScan(true);
+    setScannerError(null);
+    setScanStatusMessage(
+      scanMode === 'multi'
+        ? 'Scanning… Follow the prompts on your scanner to capture each page.'
+        : 'Scanning…'
+    );
+
+    try {
+      const result = await globalThis.dmsClient.startScan(selectedScannerId, { mode: scanMode });
+      if (!result?.success) {
+        setScannerError(result?.error ?? 'Failed to start scan.');
+        setScanStatusMessage(null);
+        return;
+      }
+
+      if (scanMode === 'multi') {
+        if (!result.session) {
+          setScannerError('No pages were captured. Please try scanning again.');
+          setScanStatusMessage(null);
+          return;
+        }
+
+        const { id, pages, suggestedFilePath, defaultFileName } = result.session;
+        const previewPages = pages.map((page) => ({
+          ...page,
+          rotation: 0,
+        }));
+        const { directory, fileName } = splitPath(suggestedFilePath);
+
+        setScanSessionId(id);
+        setScanPages(previewPages);
+        setScanSaveDirectory(directory);
+        setScanFileName(normalizePdfFileName(fileName || defaultFileName));
+        setScanStatusMessage('Pages captured. Review, rotate and save when ready.');
+      } else if (result.filePath) {
+        setScanStatusMessage(`Scan completed. File saved to ${result.filePath}`);
+      } else {
+        setScanStatusMessage('Scan completed.');
+      }
+    } catch (error) {
+      console.error('Failed to start scanner', error);
+      const message = (error as { message?: string } | null)?.message ?? 'Failed to start scan.';
+      setScannerError(message);
+      setScanStatusMessage(null);
+    } finally {
+      setIsStartingScan(false);
+    }
+  }, [selectedScannerId, scanMode, scanSessionId, resetScanSessionState]);
+
+  const handleRotatePage = useCallback((pageId: string, delta: number) => {
+    setScanPages((previous) =>
+      previous.map((page) =>
+        page.id === pageId
+          ? {
+              ...page,
+              rotation: (page.rotation + delta + 360) % 360,
+            }
+          : page
+      )
+    );
+  }, []);
+
+  const handleAppendScanPages = useCallback(async () => {
+    if (!scanSessionId) {
+      return;
+    }
+
+    setIsAppendingScan(true);
+    setScannerError(null);
+    setScanStatusMessage('Scanning… Follow the prompts to capture additional pages.');
+
+    try {
+      const result = await globalThis.dmsClient.appendScanPages(scanSessionId);
+      if (!result?.success) {
+        setScannerError(result?.error ?? 'Failed to scan additional pages.');
+        setScanStatusMessage(null);
+        return;
+      }
+
+      const appended = (result.pages ?? []).map((page) => ({
+        ...page,
+        rotation: 0,
+      }));
+
+      if (appended.length > 0) {
+        setScanPages((previous) => [...previous, ...appended]);
+        setScanStatusMessage('Additional pages captured. Review before saving.');
+      } else {
+        setScanStatusMessage('No additional pages were captured.');
+      }
+    } catch (error) {
+      console.error('Failed to append scan pages', error);
+      const message = (error as { message?: string } | null)?.message ?? 'Failed to scan additional pages.';
+      setScannerError(message);
+      setScanStatusMessage(null);
+    } finally {
+      setIsAppendingScan(false);
+    }
+  }, [scanSessionId]);
+
+  const handleChooseScanSaveLocation = useCallback(async () => {
+    const result = await globalThis.dmsClient.chooseScanSaveLocation({
+      directory: scanSaveDirectory,
+      fileName: normalizePdfFileName(scanFileName),
+    });
+
+    if (result) {
+      setScanSaveDirectory(result.directory);
+      setScanFileName(normalizePdfFileName(result.fileName));
+    }
+  }, [scanSaveDirectory, scanFileName]);
+
+  const handleOpenPreview = useCallback(() => {
+    setIsPreviewOpen(true);
+  }, []);
+
+  const handleClosePreview = useCallback(() => {
+    setIsPreviewOpen(false);
+  }, []);
+
+  const handleSaveScanSession = useCallback(async () => {
+    if (!scanSessionId) {
+      return;
+    }
+
+    setIsSavingScan(true);
+    setScannerError(null);
+    setScanStatusMessage('Saving PDF…');
+
+    try {
+      const result = await globalThis.dmsClient.saveScanSession({
+        sessionId: scanSessionId,
+        directory: scanSaveDirectory,
+        fileName: normalizePdfFileName(scanFileName),
+        pages: scanPages.map((page) => ({
+          id: page.id,
+          rotation: page.rotation,
+        })),
+      });
+
+      if (!result?.success) {
+        setScannerError(result?.error ?? 'Failed to save scanned document.');
+        setScanStatusMessage(null);
+        return;
+      }
+
+      setScanStatusMessage(result.filePath ? `Saved PDF to ${result.filePath}` : 'Scan saved.');
+      resetScanSessionState();
+      void loadFiles();
+    } catch (error) {
+      console.error('Failed to save scan session', error);
+      const message = (error as { message?: string } | null)?.message ?? 'Failed to save scanned document.';
+      setScannerError(message);
+      setScanStatusMessage(null);
+    } finally {
+      setIsSavingScan(false);
+    }
+  }, [scanSessionId, scanSaveDirectory, scanFileName, scanPages, resetScanSessionState, loadFiles]);
+
+  const handleDiscardScanSession = useCallback(() => {
+    if (!scanSessionId) {
+      return;
+    }
+
+    void globalThis.dmsClient.discardScanSession(scanSessionId);
+    resetScanSessionState();
+    setScanStatusMessage('Scan session discarded.');
+  }, [resetScanSessionState, scanSessionId]);
+
+  const handleScanFileNameBlur = useCallback(() => {
+    setScanFileName((current) => normalizePdfFileName(current.replace(/[\\/]/g, '')));
+  }, []);
+
+  useEffect(() => {
+    if (scanMode === 'single' && scanSessionId) {
+      void globalThis.dmsClient.discardScanSession(scanSessionId);
+      resetScanSessionState();
+    }
+  }, [scanMode, scanSessionId, resetScanSessionState]);
+
   const handleToggleSidebar = useCallback(() => {
     setIsSidebarCollapsed((previous) => !previous);
   }, []);
@@ -403,6 +709,14 @@ export default function App(): JSX.Element {
       disabled: !config.workspacePath,
     },
     {
+      label: 'Scan Documents',
+      icon: '🖨️',
+      onClick: () => {
+        handleOpenScannerModal();
+      },
+      disabled: false,
+    },
+    {
       label: 'Open Web App',
       icon: '🌐',
       onClick: () => {
@@ -511,10 +825,10 @@ export default function App(): JSX.Element {
     <div className={`app ${isSidebarCollapsed ? 'app--sidebar-collapsed' : ''}`}>
       <aside className={`sidebar ${isSidebarCollapsed ? 'sidebar--collapsed' : ''}`}>
         <div className="sidebar__brand">
-          <span className="sidebar__logo">S</span>
+          <span className="sidebar__logo">DMS</span>
           <div className="sidebar__brand-meta">
-            <div className="sidebar__title">SATA Client</div>
-            <div className="sidebar__subtitle">Helper App</div>
+            <div className="sidebar__title">DMS Client</div>
+            <div className="sidebar__subtitle">Document Management System</div>
           </div>
         </div>
         <div className="sidebar__actions">
@@ -687,6 +1001,259 @@ export default function App(): JSX.Element {
           <div className="status-bar__item">Files: {files.length}</div>
         </footer>
       </div>
+
+      {isScannerModalOpen && (
+        <div className="modal-overlay">
+          <dialog
+            className={`settings-modal${scanMode === 'multi' ? ' settings-modal--wide' : ''}`}
+            open
+          >
+            <header className="settings-modal__header">
+              <h2>Scan Documents</h2>
+            </header>
+            <div className="settings-modal__section">
+              <div className="settings-modal__label">Scan mode</div>
+              <div className="scanner-mode">
+                <label className="scanner-mode__option">
+                  <input
+                    type="radio"
+                    name="scan-mode"
+                    value="single"
+                    checked={scanMode === 'single'}
+                    onChange={() => setScanMode('single')}
+                  />
+                  <div>
+                    <div className="scanner-mode__title">Single page</div>
+                    <small>Save as an individual image (PNG).</small>
+                  </div>
+                </label>
+                <label className="scanner-mode__option">
+                  <input
+                    type="radio"
+                    name="scan-mode"
+                    value="multi"
+                    checked={scanMode === 'multi'}
+                    onChange={() => setScanMode('multi')}
+                  />
+                  <div>
+                    <div className="scanner-mode__title">Multi-page PDF</div>
+                    <small>Combine multiple pages into one PDF. You will be prompted between pages.</small>
+                  </div>
+                </label>
+              </div>
+              <div className="settings-modal__label">Available scanners</div>
+              <div className="settings-modal__field">
+                {isLoadingScanners ? (
+                  <div>Loading scanners…</div>
+                ) : scanners.length > 0 ? (
+                  <div className="scanner-select">
+                    <Select.Root value={selectedScannerId} onValueChange={(value) => setSelectedScannerId(value)}>
+                      <Select.Trigger className="scanner-select__trigger" aria-label="Choose a scanner">
+                        <Select.Value placeholder="Select a scanner" />
+                        <Select.Icon className="scanner-select__icon">▾</Select.Icon>
+                      </Select.Trigger>
+                      <Select.Portal>
+                        <Select.Content className="scanner-select__content" position="popper" sideOffset={4}>
+                          <Select.Viewport className="scanner-select__viewport">
+                            {scanners.map((scanner) => (
+                              <Select.Item key={scanner.id} value={scanner.id} className="scanner-select__item">
+                                <Select.ItemText>{scanner.name}</Select.ItemText>
+                                <Select.ItemIndicator className="scanner-select__indicator">✓</Select.ItemIndicator>
+                              </Select.Item>
+                            ))}
+                          </Select.Viewport>
+                        </Select.Content>
+                      </Select.Portal>
+                    </Select.Root>
+                    {selectedScanner && (
+                      <div className="scanner-select__meta">
+                        <small>
+                          Status: {selectedScanner.status} · Source: {selectedScanner.source.toUpperCase()}
+                        </small>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="scanner-list__empty">No scanners detected.</div>
+                )}
+              </div>
+            </div>
+            {scanMode === 'multi' && scanSessionId && (
+              <>
+                <div className="settings-modal__section">
+                  <label className="scanner-save__label" htmlFor="scan-file-name">
+                    File name
+                  </label>
+                  <input
+                    id="scan-file-name"
+                    type="text"
+                    value={scanFileName}
+                    onChange={(event) => setScanFileName(event.target.value.replace(/[\\/]/g, ''))}
+                    onBlur={handleScanFileNameBlur}
+                    disabled={isSavingScan}
+                  />
+                  <div className="scanner-save__path">Saving to: {scanDestinationLabel}</div>
+                  <div className="scanner-save__actions">
+                    <button type="button" onClick={handleChooseScanSaveLocation} disabled={isSavingScan}>
+                      Choose location
+                    </button>
+                    <button type="button" className="ghost" onClick={handleOpenPreview} disabled={scanPages.length === 0}>
+                      Preview pages
+                    </button>
+                    <button type="button" className="ghost" onClick={handleDiscardScanSession} disabled={isSavingScan || isAppendingScan}>
+                      Discard session
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+            {(scannerError || scanStatusMessage) && (
+              <div className="settings-modal__section">
+                {scannerError ? (
+                  <div className="login-alert login-alert--error" role="alert">
+                    {scannerError}
+                  </div>
+                ) : null}
+                {scanStatusMessage ? (
+                  <div className="login-alert login-alert--info" role="status">
+                    {scanStatusMessage}
+                  </div>
+                ) : null}
+              </div>
+            )}
+            <div className="settings-modal__section">
+              <div className="settings-modal__actions">
+                <button type="button" onClick={() => handleRefreshScanners()} disabled={isLoadingScanners}>
+                  {isLoadingScanners ? 'Refreshing…' : 'Refresh list'}
+                </button>
+              </div>
+            </div>
+            <div className="settings-modal__footer">
+              {scanMode === 'multi' && scanSessionId ? (
+                <>
+                  <button
+                    className="button button--secondary"
+                    type="button"
+                    onClick={() => handleAppendScanPages()}
+                    disabled={isAppendingScan || isSavingScan}
+                  >
+                    {isAppendingScan ? 'Scanning…' : 'Scan more pages'}
+                  </button>
+                  <button className="button button--primary" type="button" onClick={() => handleSaveScanSession()} disabled={isSavingScan || scanPages.length === 0}>
+                    {isSavingScan ? 'Saving…' : 'Save as PDF'}
+                  </button>
+                  <button className="ghost" onClick={handleCloseScannerModal} disabled={isSavingScan || isAppendingScan}>
+                    Close
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="button button--secondary"
+                    type="button"
+                    onClick={() => handleStartScan()}
+                    disabled={!selectedScannerId || isStartingScan || isLoadingScanners}
+                  >
+                    {isStartingScan ? 'Scanning…' : 'Start scanning'}
+                  </button>
+                  <button className="ghost" onClick={handleCloseScannerModal}>
+                    Close
+                  </button>
+                </>
+              )}
+            </div>
+          </dialog>
+        </div>
+      )}
+
+      {isPreviewOpen && (
+        <div className="modal-overlay modal-overlay--preview">
+          <dialog className="scanner-preview-modal" open>
+            <header className="scanner-preview-modal__header">
+              <div>
+                <h2>Scanned Pages</h2>
+                <p>{scanPages.length} page{scanPages.length === 1 ? '' : 's'} ready for export</p>
+              </div>
+              <button
+                type="button"
+                className="icon-button scanner-preview-modal__close"
+                onClick={handleClosePreview}
+                aria-label="Close preview"
+              >
+                ✕
+              </button>
+            </header>
+            <div className="scanner-preview-modal__body">
+              {scanPages.length === 0 ? (
+                <div className="scanner-preview__empty">No pages captured yet.</div>
+              ) : (
+                <div className="scanner-preview__grid">
+                  {scanPages.map((page, index) => (
+                    <div key={page.id} className="scanner-preview__page">
+                      <div className="scanner-preview__image-wrapper">
+                        <img
+                          src={page.dataUrl}
+                          alt={`Scanned page ${index + 1}`}
+                          style={{ transform: `rotate(${page.rotation}deg)` }}
+                        />
+                      </div>
+                      <div className="scanner-preview__meta">
+                        <span>Page {index + 1}</span>
+                        {page.rotation !== 0 ? <span>{page.rotation}°</span> : null}
+                      </div>
+                      <div className="scanner-preview__controls">
+                        <button
+                          type="button"
+                          className="ghost"
+                          onClick={() => handleRotatePage(page.id, -90)}
+                          disabled={isAppendingScan || isSavingScan}
+                        >
+                          ↺ Rotate left
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost"
+                          onClick={() => handleRotatePage(page.id, 90)}
+                          disabled={isAppendingScan || isSavingScan}
+                        >
+                          ↻ Rotate right
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <footer className="scanner-preview-modal__footer">
+              <div className="scanner-preview-modal__summary">
+                <span>{scanPages.length} page{scanPages.length === 1 ? '' : 's'}</span>
+                <span>Destination: {scanDestinationLabel}</span>
+              </div>
+              <div className="scanner-preview-modal__actions">
+                <button type="button" className="ghost" onClick={handleClosePreview} disabled={isSavingScan}>
+                  Close preview
+                </button>
+                <button
+                  type="button"
+                  className="button button--secondary"
+                  onClick={() => handleAppendScanPages()}
+                  disabled={isAppendingScan || isSavingScan}
+                >
+                  {isAppendingScan ? 'Scanning…' : 'Scan more pages'}
+                </button>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => handleSaveScanSession()}
+                  disabled={isSavingScan || scanPages.length === 0}
+                >
+                  {isSavingScan ? 'Saving…' : 'Save as PDF'}
+                </button>
+              </div>
+            </footer>
+          </dialog>
+        </div>
+      )}
 
       {isSettingsOpen && (
         <div className="modal-overlay">

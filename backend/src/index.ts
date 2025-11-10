@@ -12,6 +12,7 @@ import adminRoutes from './routes/admin.route';
 import { initializeSocketServer } from './socket/socket-manager';
 import notificationRoutes from './routes/notification.route';
 import { registerNotificationEventHandlers } from './events/register-notification-handlers';
+import scannerRoutes from './routes/scanner.route';
 
 dotenv.config();
 
@@ -51,6 +52,7 @@ app.use('/api/folders', folderRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/scanners', scannerRoutes);
 
 // API info endpoint
 app.get('/api', (_req: Request, res: Response) => {

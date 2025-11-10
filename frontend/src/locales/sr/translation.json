@@ -126,7 +126,7 @@
     "viewProfile": "Pregled profila"
   },
   "header": {
-    "addFile": "Dodaj fajl",
+    "startScanning": "Pokreni skeniranje",
     "addFolder": "Dodaj folder",
     "upload": "Otpremi",
     "copy": "Kopiraj",
@@ -193,7 +193,26 @@
     "referenceTables": "Šifarnici",
     "users": "Korisnici",
     "roles": "Uloge",
-    "userRoles": "Uloge korisnika"
+    "userRoles": "Uloge korisnika",
+    "scanning": "Skeniranje"
+  },
+  "scanning": {
+    "title": "Skeniranje",
+    "description": "Izaberite dostupan skener kako biste direktno ubacili dokumente u sistem.",
+    "refresh": "Osveži",
+    "loading": "Učitavanje skenera...",
+    "noScannersTitle": "Nema dostupnih skenera",
+    "noScannersDescription": "Nismo pronašli aktivne skenere. Proverite da li su povezani i uključeni, pa pokušajte ponovo.",
+    "manufacturer": "Proizvođač",
+    "lastUsed": "Poslednje korišćenje: {{date}}",
+    "start": "Pokreni skeniranje",
+    "scanStarted": "Skeniranje je pokrenuto na uređaju {{name}}",
+    "failedToStart": "Nije moguće pokrenuti skeniranje",
+    "status": {
+      "idle": "Spreman",
+      "busy": "U toku",
+      "offline": "Van mreže"
+    }
   },
   "dashboard": {
     "welcome": "Dobrodošli u vaš sistem za upravljanje dokumentima",

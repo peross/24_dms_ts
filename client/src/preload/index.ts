@@ -13,6 +13,15 @@ const api = {
   openWorkspaceFolder: () => ipcRenderer.invoke('workspace:open-folder'),
   revealWorkspaceItem: (relativePath: string) => ipcRenderer.invoke('workspace:reveal-file', relativePath),
   openWebApp: () => ipcRenderer.invoke('workspace:open-web'),
+  listScanners: () => ipcRenderer.invoke('scanner:list'),
+  startScan: (scannerId: string, options?: { mode?: 'single' | 'multi' }) =>
+    ipcRenderer.invoke('scanner:start', { scannerId, options }),
+  appendScanPages: (sessionId: string) => ipcRenderer.invoke('scanner:append', sessionId),
+  saveScanSession: (payload: { sessionId: string; directory: string; fileName: string; pages: Array<{ id: string; rotation?: number }> }) =>
+    ipcRenderer.invoke('scanner:save-session', payload),
+  discardScanSession: (sessionId: string) => ipcRenderer.invoke('scanner:discard-session', sessionId),
+  chooseScanSaveLocation: (payload: { directory: string; fileName: string }) =>
+    ipcRenderer.invoke('scanner:choose-save-path', payload),
   getNotifications: (params?: { limit?: number; offset?: number; unreadOnly?: boolean }) =>
     ipcRenderer.invoke('notifications:list', params ?? {}),
   markNotificationRead: (notificationId: number) => ipcRenderer.invoke('notifications:mark-read', notificationId),

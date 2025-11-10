@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { LayoutDashboard, Folder, Users, Clock, Trash2, Settings, ChevronLeft, ChevronRight, X, BookOpen, ChevronDown, ChevronUp } from "lucide-react"
+import { LayoutDashboard, Folder, Users, Clock, Trash2, Settings, ChevronLeft, ChevronRight, X, BookOpen, ChevronDown, ChevronUp, ScanLine } from "lucide-react"
 import { NavLink, useLocation, useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
@@ -33,6 +33,7 @@ const baseSidebarItems: SidebarItem[] = [
   { label: "Shared", icon: Users, path: "/shared", translationKey: "sidebar.shared" },
   { label: "Recent", icon: Clock, path: "/recent", translationKey: "sidebar.recent" },
   { label: "Trash", icon: Trash2, path: "/trash", translationKey: "sidebar.trash" },
+  { label: "Scanning", icon: ScanLine, path: "/scanning", translationKey: "sidebar.scanning" },
 ]
 
 // Admin-only sidebar items

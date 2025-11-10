@@ -1,5 +1,5 @@
 import {
-  FilePlus,
+  ScanText,
   FolderPlus,
   Upload,
   Copy,
@@ -245,7 +245,7 @@ export function Header({ onMobileMenuClick, viewMode, onViewModeChange }: Header
   // All buttons that can be moved to dropdown (defined after handlers are available)
   const allButtons = [
     { id: 'save', condition: isTextFile, icon: Save, label: t('files.save'), onClick: handleSaveTextFile, disabled: false },
-    { id: 'addFile', condition: true, icon: FilePlus, label: t('header.addFile'), onClick: () => {}, disabled: false },
+    { id: 'startScanning', condition: true, icon: ScanText, label: t('header.startScanning'), onClick: () => {}, disabled: false },
     { id: 'addFolder', condition: true, icon: FolderPlus, label: t('header.addFolder'), onClick: () => setCreateFolderDialogOpen(true), disabled: false },
     { id: 'upload', condition: true, icon: Upload, label: t('header.upload'), onClick: () => setUploadFileDialogOpen(true), disabled: selectedFolderId === null || isSystemRootSelected },
     { id: 'paste', condition: canPaste() && selectedFolderId !== null, icon: Clipboard, label: t('header.paste'), onClick: handlePaste, disabled: false },
