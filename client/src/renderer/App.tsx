@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import * as Select from '@radix-ui/react-select';
 import type { SyncedFileEntry } from '../shared/types';
+import { setLanguage as persistLanguage } from './i18n';
 
 interface ConfigResponse {
   workspacePath?: string;
@@ -27,14 +29,14 @@ interface AuthStateChangePayload {
 
 const defaultConfig: ConfigResponse = {};
 
-type StatusPillProps = Readonly<{ active: boolean }>;
+type StatusPillProps = Readonly<{ active: boolean; activeLabel: string; idleLabel: string }>;
 type BadgeTone = 'work' | 'personal' | 'shared' | 'documents' | 'images' | 'videos' | 'audio' | 'archives' | 'other';
 
-function StatusPill({ active }: StatusPillProps) {
+function StatusPill({ active, activeLabel, idleLabel }: StatusPillProps) {
   return (
     <span className={`status-pill ${active ? 'active' : 'inactive'}`}>
       <span className="dot" />
-      {active ? 'Active' : 'Idle'}
+      {active ? activeLabel : idleLabel}
     </span>
   );
 }
@@ -82,6 +84,9 @@ function normalizePdfFileName(value: string): string {
 }
 
 export default function App(): JSX.Element {
+  const { t, i18n } = useTranslation();
+  const [language, setLanguageState] = useState(() => i18n.language);
+
   const [config, setConfig] = useState<ConfigResponse>(defaultConfig);
   const [apiBaseUrl, setApiBaseUrl] = useState('');
   const [isSavingApiBaseUrl, setIsSavingApiBaseUrl] = useState(false);
@@ -134,6 +139,28 @@ export default function App(): JSX.Element {
     setIsSavingScan(false);
     setIsPreviewOpen(false);
   }, []);
+
+  useEffect(() => {
+    const handler = (lng: string) => {
+      setLanguageState(lng);
+    };
+    i18n.on('languageChanged', handler);
+    return () => {
+      i18n.off('languageChanged', handler);
+    };
+  }, [i18n]);
+
+  const handleSelectLanguage = useCallback(
+    (lng: string) => {
+      persistLanguage(lng);
+      setLanguageState(lng);
+    },
+    []
+  );
+  const languageLabel = useMemo(
+    () => (language === 'sr' ? t('language.serbian') : t('language.english')),
+    [language, t]
+  );
 
   const profileRef = useRef<HTMLDivElement | null>(null);
 
@@ -392,8 +419,8 @@ export default function App(): JSX.Element {
     setScannerError(null);
     setScanStatusMessage(
       scanMode === 'multi'
-        ? 'Scanning… Follow the prompts on your scanner to capture each page.'
-        : 'Scanning…'
+        ? t('scanner.scanningMulti')
+        : t('scanner.scanning')
     );
 
     try {
@@ -406,7 +433,7 @@ export default function App(): JSX.Element {
 
       if (scanMode === 'multi') {
         if (!result.session) {
-          setScannerError('No pages were captured. Please try scanning again.');
+          setScannerError(t('scanner.noAdditional'));
           setScanStatusMessage(null);
           return;
         }
@@ -422,11 +449,11 @@ export default function App(): JSX.Element {
         setScanPages(previewPages);
         setScanSaveDirectory(directory);
         setScanFileName(normalizePdfFileName(fileName || defaultFileName));
-        setScanStatusMessage('Pages captured. Review, rotate and save when ready.');
+        setScanStatusMessage(t('scanner.additionalCaptured'));
       } else if (result.filePath) {
-        setScanStatusMessage(`Scan completed. File saved to ${result.filePath}`);
+        setScanStatusMessage(t('scanner.savedTo', { path: result.filePath }));
       } else {
-        setScanStatusMessage('Scan completed.');
+        setScanStatusMessage(t('scanner.scanning'));
       }
     } catch (error) {
       console.error('Failed to start scanner', error);
@@ -458,12 +485,12 @@ export default function App(): JSX.Element {
 
     setIsAppendingScan(true);
     setScannerError(null);
-    setScanStatusMessage('Scanning… Follow the prompts to capture additional pages.');
+    setScanStatusMessage(t('scanner.scanningMulti'));
 
     try {
       const result = await globalThis.dmsClient.appendScanPages(scanSessionId);
       if (!result?.success) {
-        setScannerError(result?.error ?? 'Failed to scan additional pages.');
+        setScannerError(result?.error ?? t('scanner.noAdditional'));
         setScanStatusMessage(null);
         return;
       }
@@ -475,13 +502,13 @@ export default function App(): JSX.Element {
 
       if (appended.length > 0) {
         setScanPages((previous) => [...previous, ...appended]);
-        setScanStatusMessage('Additional pages captured. Review before saving.');
+        setScanStatusMessage(t('scanner.additionalCaptured'));
       } else {
-        setScanStatusMessage('No additional pages were captured.');
+        setScanStatusMessage(t('scanner.noAdditional'));
       }
     } catch (error) {
       console.error('Failed to append scan pages', error);
-      const message = (error as { message?: string } | null)?.message ?? 'Failed to scan additional pages.';
+      const message = (error as { message?: string } | null)?.message ?? t('scanner.noAdditional');
       setScannerError(message);
       setScanStatusMessage(null);
     } finally {
@@ -516,7 +543,7 @@ export default function App(): JSX.Element {
 
     setIsSavingScan(true);
     setScannerError(null);
-    setScanStatusMessage('Saving PDF…');
+    setScanStatusMessage(t('scanner.saveStatus'));
 
     try {
       const result = await globalThis.dmsClient.saveScanSession({
@@ -530,17 +557,17 @@ export default function App(): JSX.Element {
       });
 
       if (!result?.success) {
-        setScannerError(result?.error ?? 'Failed to save scanned document.');
+        setScannerError(result?.error ?? t('scanner.saveStatus'));
         setScanStatusMessage(null);
         return;
       }
 
-      setScanStatusMessage(result.filePath ? `Saved PDF to ${result.filePath}` : 'Scan saved.');
+      setScanStatusMessage(result.filePath ? t('scanner.savedTo', { path: result.filePath }) : t('scanner.saveStatus'));
       resetScanSessionState();
       void loadFiles();
     } catch (error) {
       console.error('Failed to save scan session', error);
-      const message = (error as { message?: string } | null)?.message ?? 'Failed to save scanned document.';
+      const message = (error as { message?: string } | null)?.message ?? t('scanner.saveStatus');
       setScannerError(message);
       setScanStatusMessage(null);
     } finally {
@@ -555,7 +582,7 @@ export default function App(): JSX.Element {
 
     void globalThis.dmsClient.discardScanSession(scanSessionId);
     resetScanSessionState();
-    setScanStatusMessage('Scan session discarded.');
+    setScanStatusMessage(t('scanner.sessionDiscarded'));
   }, [resetScanSessionState, scanSessionId]);
 
   const handleScanFileNameBlur = useCallback(() => {
@@ -619,20 +646,20 @@ export default function App(): JSX.Element {
 
   const emptyMessage = useMemo(() => {
     if (!config.syncActive) {
-      return 'Sync is inactive. Start sync to populate your workspace.';
+      return t('workspace.emptyNoSync');
     }
     if (filteredFiles.length === 0) {
-      return searchTerm ? 'No files match your search.' : 'No files available yet.';
+      return searchTerm ? t('workspace.emptySearch') : t('workspace.emptyNoFiles');
     }
     return '';
-  }, [config.syncActive, filteredFiles.length, searchTerm]);
+  }, [config.syncActive, filteredFiles.length, searchTerm, t]);
 
   const workspaceButtonLabel = useMemo(() => {
     if (isWorkspaceBusy) {
-      return 'Processing…';
+      return t('login.choosing');
     }
-    return config.workspacePath ? 'Change location' : 'Choose location';
-  }, [config.workspacePath, isWorkspaceBusy]);
+    return config.workspacePath ? t('common.chooseLocation') : t('login.chooseWorkspace');
+  }, [config.workspacePath, isWorkspaceBusy, t]);
 
   const formatSize = useCallback((value: number) => {
     if (!value) return '0 B';
@@ -655,9 +682,11 @@ export default function App(): JSX.Element {
   const profileEmail = config.auth?.email ?? '';
   const profileInitial = profileName.trim().charAt(0).toUpperCase() || 'A';
   const hasFiles = filteredFiles.length > 0;
-  const viewTitle = 'Workspace Sync';
-  const viewDescription = 'Quick helper to keep your desktop and web files aligned.';
-  const resolvedEmptyMessage = emptyMessage || 'No files to display.';
+  const viewTitle = t('header.workspaceSync');
+  const viewDescription = t('header.workspaceSyncDescription');
+  const resolvedEmptyMessage =
+    emptyMessage ||
+    t('workspace.emptyNoFiles');
 
   const getFileIcon = useCallback(
     (file: SyncedFileEntry) => {
@@ -701,7 +730,7 @@ export default function App(): JSX.Element {
 
   const sidebarActions = [
     {
-      label: 'Open Workspace',
+      label: t('header.openWorkspace'),
       icon: '📂',
       onClick: () => {
         void handleOpenWorkspace();
@@ -709,7 +738,7 @@ export default function App(): JSX.Element {
       disabled: !config.workspacePath,
     },
     {
-      label: 'Scan Documents',
+      label: t('header.scanDocuments'),
       icon: '🖨️',
       onClick: () => {
         handleOpenScannerModal();
@@ -717,7 +746,7 @@ export default function App(): JSX.Element {
       disabled: false,
     },
     {
-      label: 'Open Web App',
+      label: t('header.openWebApp'),
       icon: '🌐',
       onClick: () => {
         void handleOpenWebApp();
@@ -733,8 +762,31 @@ export default function App(): JSX.Element {
           <div className="login-panel__brand">
             <span className="login-panel__logo">S</span>
             <div>
-              <h1>Document Management</h1>
-              <p>Sign in to keep your files in sync.</p>
+              <h1>{t('login.title')}</h1>
+              <p>{t('login.subtitle')}</p>
+            </div>
+            <div className="language-switcher">
+              <label htmlFor="language-select" className="language-switcher__label">
+                {t('language.label')}
+              </label>
+              <Select.Root value={language} onValueChange={handleSelectLanguage}>
+                <Select.Trigger id="language-select" className="language-switcher__trigger" aria-label={t('language.label')}>
+                  <Select.Value>{languageLabel}</Select.Value>
+                  <Select.Icon className="language-switcher__icon">▾</Select.Icon>
+                </Select.Trigger>
+                <Select.Portal>
+                  <Select.Content className="language-switcher__content" position="popper" sideOffset={4}>
+                    <Select.Viewport className="language-switcher__viewport">
+                      <Select.Item value="en" className="language-switcher__item">
+                        <Select.ItemText>{t('language.english')}</Select.ItemText>
+                      </Select.Item>
+                      <Select.Item value="sr" className="language-switcher__item">
+                        <Select.ItemText>{t('language.serbian')}</Select.ItemText>
+                      </Select.Item>
+                    </Select.Viewport>
+                  </Select.Content>
+                </Select.Portal>
+              </Select.Root>
             </div>
           </div>
 
@@ -746,7 +798,7 @@ export default function App(): JSX.Element {
 
           <div className="login-panel__section login-panel__section--access">
             <div className="login-field login-field--stack">
-              <label htmlFor="login-api">API Base URL</label>
+              <label htmlFor="login-api">{t('login.apiLabel')}</label>
               <input
                 id="login-api"
                 type="text"
@@ -755,13 +807,13 @@ export default function App(): JSX.Element {
                 placeholder="https://dms.example.com/api"
               />
               <button onClick={() => handleSaveApiBaseUrl()} disabled={isSavingApiBaseUrl}>
-                {isSavingApiBaseUrl ? 'Saving…' : 'Save'}
+                {isSavingApiBaseUrl ? t('login.saving') : t('common.save')}
               </button>
               {config.apiBaseUrl && <small>Current: {config.apiBaseUrl}</small>}
             </div>
 
             <div className="login-field login-field--stack">
-              <label htmlFor="login-workspace">Workspace Folder</label>
+              <label htmlFor="login-workspace">{t('login.workspaceLabel')}</label>
               <div id="login-workspace" className="login-field__value">
                 {config.workspacePath ?? 'Not selected yet'}
               </div>
@@ -774,7 +826,7 @@ export default function App(): JSX.Element {
                   onClick={() => handleOpenWorkspace()}
                   disabled={!config.workspacePath}
                 >
-                  Open Folder
+                  {t('login.openFolder')}
                 </button>
               </div>
             </div>
@@ -782,7 +834,7 @@ export default function App(): JSX.Element {
 
           <div className="login-panel__section login-panel__section--form">
             <div className="login-field">
-              <label htmlFor="login-identifier">Email or Username</label>
+              <label htmlFor="login-identifier">{t('login.identifierLabel')}</label>
               <input
                 id="login-identifier"
                 autoComplete="username"
@@ -792,7 +844,7 @@ export default function App(): JSX.Element {
               />
             </div>
             <div className="login-field">
-              <label htmlFor="login-password">Password</label>
+              <label htmlFor="login-password">{t('login.passwordLabel')}</label>
               <input
                 id="login-password"
                 type="password"
@@ -803,7 +855,7 @@ export default function App(): JSX.Element {
               />
             </div>
             <div className="login-field">
-              <label htmlFor="login-twofactor">Two-factor Code (if required)</label>
+              <label htmlFor="login-twofactor">{t('login.twoFactorLabel')}</label>
               <input
                 id="login-twofactor"
                 value={twoFactorToken}
@@ -812,7 +864,7 @@ export default function App(): JSX.Element {
               />
             </div>
             <button className="login-submit" onClick={() => handleLogin()} disabled={isSubmittingLogin}>
-              {isSubmittingLogin ? 'Signing in…' : 'Login'}
+              {isSubmittingLogin ? t('common.loading') : t('login.loginButton')}
             </button>
           </div>
 
@@ -827,8 +879,8 @@ export default function App(): JSX.Element {
         <div className="sidebar__brand">
           <span className="sidebar__logo">DMS</span>
           <div className="sidebar__brand-meta">
-            <div className="sidebar__title">DMS Client</div>
-            <div className="sidebar__subtitle">Document Management System</div>
+            <div className="sidebar__title">{t('common.appName')}</div>
+            <div className="sidebar__subtitle">{t('common.helperApp')}</div>
           </div>
         </div>
         <div className="sidebar__actions">
@@ -866,17 +918,44 @@ export default function App(): JSX.Element {
             </div>
           </div>
           <div className="workspace__header-utilities">
+            <div className="language-switcher language-switcher--header">
+              <label htmlFor="language-select-header" className="language-switcher__label">
+                {t('language.label')}
+              </label>
+              <Select.Root value={language} onValueChange={handleSelectLanguage}>
+                <Select.Trigger
+                  id="language-select-header"
+                  className="language-switcher__trigger"
+                  aria-label={t('language.label')}
+                >
+                  <Select.Value>{languageLabel}</Select.Value>
+                  <Select.Icon className="language-switcher__icon">▾</Select.Icon>
+                </Select.Trigger>
+                <Select.Portal>
+                  <Select.Content className="language-switcher__content" position="popper" sideOffset={4}>
+                    <Select.Viewport className="language-switcher__viewport">
+                      <Select.Item value="en" className="language-switcher__item">
+                        <Select.ItemText>{t('language.english')}</Select.ItemText>
+                      </Select.Item>
+                      <Select.Item value="sr" className="language-switcher__item">
+                        <Select.ItemText>{t('language.serbian')}</Select.ItemText>
+                      </Select.Item>
+                    </Select.Viewport>
+                  </Select.Content>
+                </Select.Portal>
+              </Select.Root>
+            </div>
             <div className="workspace__search">
               <input
                 type="search"
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Search your files"
-                aria-label="Search files"
+                placeholder={t('header.searchPlaceholder')}
+                aria-label={t('header.searchPlaceholder')}
               />
             </div>
             <button className="button button--secondary" type="button" onClick={() => handleRestartSync()}>
-              Resync
+              {t('header.resync')}
             </button>
             <div className="workspace__profile" ref={profileRef}>
               <button
@@ -907,7 +986,7 @@ export default function App(): JSX.Element {
                       handleOpenSettings();
                     }}
                   >
-                    Settings
+                    {t('header.settings')}
                   </button>
                   <button
                     type="button"
@@ -915,7 +994,7 @@ export default function App(): JSX.Element {
                       void handleLogout();
                     }}
                   >
-                    Logout
+                    {t('header.logout')}
                   </button>
                 </div>
               )}
@@ -925,21 +1004,27 @@ export default function App(): JSX.Element {
 
         <div className="workspace__toolbar">
           <div className="workspace__sort">
-            <label htmlFor="sort-option">Sort by</label>
+            <label htmlFor="sort-option">{t('header.sortLabel')}</label>
             <select
               id="sort-option"
               value={sortOption}
               onChange={(event) => setSortOption(event.target.value as typeof sortOption)}
             >
-              <option value="updated">Last updated</option>
-              <option value="name">Name</option>
-              <option value="size">Size</option>
+              <option value="updated">{t('header.sortUpdated')}</option>
+              <option value="name">{t('header.sortName')}</option>
+              <option value="size">{t('header.sortSize')}</option>
             </select>
           </div>
           <div />
           <div className="workspace__sync">
-            <StatusPill active={Boolean(config.syncActive)} />
-            <span className="workspace__sync-label">Last sync {lastSyncedLabel}</span>
+            <StatusPill
+              active={Boolean(config.syncActive)}
+              activeLabel={t('header.statusActive')}
+              idleLabel={t('header.statusPaused')}
+            />
+            <span className="workspace__sync-label">
+              {t('statusBar.lastSync')}: {lastSyncedLabel}
+            </span>
           </div>
         </div>
 
@@ -950,11 +1035,11 @@ export default function App(): JSX.Element {
               <table>
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>Badge</th>
-                    <th>Location</th>
-                    <th>Size</th>
-                    <th>Updated</th>
+                    <th>{t('workspace.tableName')}</th>
+                    <th>{t('workspace.tableBadge')}</th>
+                    <th>{t('workspace.tableLocation')}</th>
+                    <th>{t('workspace.tableSize')}</th>
+                    <th>{t('workspace.tableUpdated')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -980,7 +1065,7 @@ export default function App(): JSX.Element {
                         </td>
                         <td>{file.relativePath}</td>
                         <td>{formatSize(Number(file.size ?? 0))}</td>
-                        <td>{file.updatedAt ? formatDate(file.updatedAt) : 'Not synced yet'}</td>
+                        <td>{file.updatedAt ? formatDate(file.updatedAt) : t('workspace.notSyncedYet')}</td>
                       </tr>
                     );
                   })}
@@ -993,12 +1078,20 @@ export default function App(): JSX.Element {
         <footer className="status-bar">
           <div className="status-bar__item">
             <span className={`status-indicator ${config.syncActive ? 'online' : 'offline'}`} />
-            Sync {config.syncActive ? 'Active' : 'Paused'}
+            {t('statusBar.sync')} {config.syncActive ? t('header.statusActive') : t('header.statusPaused')}
           </div>
-          <div className="status-bar__item">Last Sync: {lastSyncedLabel}</div>
-          <div className="status-bar__item">API: {config.apiBaseUrl ?? 'Not configured'}</div>
-          <div className="status-bar__item">Workspace: {config.workspacePath ?? 'Not selected'}</div>
-          <div className="status-bar__item">Files: {files.length}</div>
+          <div className="status-bar__item">
+            {t('statusBar.lastSync')}: {lastSyncedLabel}
+          </div>
+          <div className="status-bar__item">
+            {t('statusBar.api')}: {config.apiBaseUrl ?? 'N/A'}
+          </div>
+          <div className="status-bar__item">
+            {t('statusBar.workspace')}: {config.workspacePath ?? 'N/A'}
+          </div>
+          <div className="status-bar__item">
+            {t('statusBar.files')}: {files.length}
+          </div>
         </footer>
       </div>
 
@@ -1009,10 +1102,10 @@ export default function App(): JSX.Element {
             open
           >
             <header className="settings-modal__header">
-              <h2>Scan Documents</h2>
+              <h2>{t('scanner.modalTitle')}</h2>
             </header>
             <div className="settings-modal__section">
-              <div className="settings-modal__label">Scan mode</div>
+              <div className="settings-modal__label">{t('scanner.modeLabel')}</div>
               <div className="scanner-mode">
                 <label className="scanner-mode__option">
                   <input
@@ -1023,8 +1116,8 @@ export default function App(): JSX.Element {
                     onChange={() => setScanMode('single')}
                   />
                   <div>
-                    <div className="scanner-mode__title">Single page</div>
-                    <small>Save as an individual image (PNG).</small>
+                    <div className="scanner-mode__title">{t('scanner.modeSingle')}</div>
+                    <small>{t('scanner.modeSingleDescription')}</small>
                   </div>
                 </label>
                 <label className="scanner-mode__option">
@@ -1036,20 +1129,20 @@ export default function App(): JSX.Element {
                     onChange={() => setScanMode('multi')}
                   />
                   <div>
-                    <div className="scanner-mode__title">Multi-page PDF</div>
-                    <small>Combine multiple pages into one PDF. You will be prompted between pages.</small>
+                    <div className="scanner-mode__title">{t('scanner.modeMulti')}</div>
+                    <small>{t('scanner.modeMultiDescription')}</small>
                   </div>
                 </label>
               </div>
-              <div className="settings-modal__label">Available scanners</div>
+              <div className="settings-modal__label">{t('scanner.availableScanners')}</div>
               <div className="settings-modal__field">
                 {isLoadingScanners ? (
-                  <div>Loading scanners…</div>
+                  <div>{t('common.loading')}</div>
                 ) : scanners.length > 0 ? (
                   <div className="scanner-select">
                     <Select.Root value={selectedScannerId} onValueChange={(value) => setSelectedScannerId(value)}>
-                      <Select.Trigger className="scanner-select__trigger" aria-label="Choose a scanner">
-                        <Select.Value placeholder="Select a scanner" />
+                      <Select.Trigger className="scanner-select__trigger" aria-label={t('scanner.availableScanners')}>
+                        <Select.Value placeholder={t('scanner.availableScanners')} />
                         <Select.Icon className="scanner-select__icon">▾</Select.Icon>
                       </Select.Trigger>
                       <Select.Portal>
@@ -1068,13 +1161,14 @@ export default function App(): JSX.Element {
                     {selectedScanner && (
                       <div className="scanner-select__meta">
                         <small>
-                          Status: {selectedScanner.status} · Source: {selectedScanner.source.toUpperCase()}
+                          {t('scanner.statusPrefix')}: {selectedScanner.status} · {t('scanner.source')}:{' '}
+                          {selectedScanner.source.toUpperCase()}
                         </small>
                       </div>
                     )}
                   </div>
                 ) : (
-                  <div className="scanner-list__empty">No scanners detected.</div>
+                  <div className="scanner-list__empty">{t('scanner.noScanners')}</div>
                 )}
               </div>
             </div>
@@ -1082,7 +1176,7 @@ export default function App(): JSX.Element {
               <>
                 <div className="settings-modal__section">
                   <label className="scanner-save__label" htmlFor="scan-file-name">
-                    File name
+                    {t('scanner.fileNameLabel')}
                   </label>
                   <input
                     id="scan-file-name"
@@ -1092,16 +1186,18 @@ export default function App(): JSX.Element {
                     onBlur={handleScanFileNameBlur}
                     disabled={isSavingScan}
                   />
-                  <div className="scanner-save__path">Saving to: {scanDestinationLabel}</div>
+                  <div className="scanner-save__path">
+                    {t('common.destination')}: {scanDestinationLabel}
+                  </div>
                   <div className="scanner-save__actions">
                     <button type="button" onClick={handleChooseScanSaveLocation} disabled={isSavingScan}>
-                      Choose location
+                      {t('common.chooseLocation')}
                     </button>
                     <button type="button" className="ghost" onClick={handleOpenPreview} disabled={scanPages.length === 0}>
-                      Preview pages
+                      {t('common.previewPages')}
                     </button>
                     <button type="button" className="ghost" onClick={handleDiscardScanSession} disabled={isSavingScan || isAppendingScan}>
-                      Discard session
+                      {t('common.discardSession')}
                     </button>
                   </div>
                 </div>
@@ -1124,7 +1220,7 @@ export default function App(): JSX.Element {
             <div className="settings-modal__section">
               <div className="settings-modal__actions">
                 <button type="button" onClick={() => handleRefreshScanners()} disabled={isLoadingScanners}>
-                  {isLoadingScanners ? 'Refreshing…' : 'Refresh list'}
+                  {isLoadingScanners ? t('common.loading') : t('common.refresh')}
                 </button>
               </div>
             </div>
@@ -1137,13 +1233,13 @@ export default function App(): JSX.Element {
                     onClick={() => handleAppendScanPages()}
                     disabled={isAppendingScan || isSavingScan}
                   >
-                    {isAppendingScan ? 'Scanning…' : 'Scan more pages'}
+                    {isAppendingScan ? t('scanner.scanning') : t('common.scanMorePages')}
                   </button>
                   <button className="button button--primary" type="button" onClick={() => handleSaveScanSession()} disabled={isSavingScan || scanPages.length === 0}>
-                    {isSavingScan ? 'Saving…' : 'Save as PDF'}
+                    {isSavingScan ? t('scanner.saveStatus') : t('common.saveAsPdf')}
                   </button>
                   <button className="ghost" onClick={handleCloseScannerModal} disabled={isSavingScan || isAppendingScan}>
-                    Close
+                    {t('common.close')}
                   </button>
                 </>
               ) : (
@@ -1154,10 +1250,10 @@ export default function App(): JSX.Element {
                     onClick={() => handleStartScan()}
                     disabled={!selectedScannerId || isStartingScan || isLoadingScanners}
                   >
-                    {isStartingScan ? 'Scanning…' : 'Start scanning'}
+                    {isStartingScan ? t('scanner.scanning') : t('scanner.startScanning')}
                   </button>
                   <button className="ghost" onClick={handleCloseScannerModal}>
-                    Close
+                    {t('common.close')}
                   </button>
                 </>
               )}
@@ -1171,21 +1267,23 @@ export default function App(): JSX.Element {
           <dialog className="scanner-preview-modal" open>
             <header className="scanner-preview-modal__header">
               <div>
-                <h2>Scanned Pages</h2>
-                <p>{scanPages.length} page{scanPages.length === 1 ? '' : 's'} ready for export</p>
+                <h2>{t('scanner.modalTitle')}</h2>
+                <p>
+                  {t('scanner.pagesReady', { count: scanPages.length })}
+                </p>
               </div>
               <button
                 type="button"
                 className="icon-button scanner-preview-modal__close"
                 onClick={handleClosePreview}
-                aria-label="Close preview"
+              aria-label={t('scanner.closePreview')}
               >
                 ✕
               </button>
             </header>
             <div className="scanner-preview-modal__body">
               {scanPages.length === 0 ? (
-                <div className="scanner-preview__empty">No pages captured yet.</div>
+              <div className="scanner-preview__empty">{t('scanner.emptyPreview')}</div>
               ) : (
                 <div className="scanner-preview__grid">
                   {scanPages.map((page, index) => (
@@ -1198,7 +1296,7 @@ export default function App(): JSX.Element {
                         />
                       </div>
                       <div className="scanner-preview__meta">
-                        <span>Page {index + 1}</span>
+                        <span>{t('scanner.pagesCount', { count: index + 1 })}</span>
                         {page.rotation !== 0 ? <span>{page.rotation}°</span> : null}
                       </div>
                       <div className="scanner-preview__controls">
@@ -1208,7 +1306,7 @@ export default function App(): JSX.Element {
                           onClick={() => handleRotatePage(page.id, -90)}
                           disabled={isAppendingScan || isSavingScan}
                         >
-                          ↺ Rotate left
+                          ↺ {t('scanner.rotateLeft')}
                         </button>
                         <button
                           type="button"
@@ -1216,7 +1314,7 @@ export default function App(): JSX.Element {
                           onClick={() => handleRotatePage(page.id, 90)}
                           disabled={isAppendingScan || isSavingScan}
                         >
-                          ↻ Rotate right
+                          ↻ {t('scanner.rotateRight')}
                         </button>
                       </div>
                     </div>
@@ -1226,12 +1324,14 @@ export default function App(): JSX.Element {
             </div>
             <footer className="scanner-preview-modal__footer">
               <div className="scanner-preview-modal__summary">
-                <span>{scanPages.length} page{scanPages.length === 1 ? '' : 's'}</span>
-                <span>Destination: {scanDestinationLabel}</span>
+              <span>{t('scanner.pagesCount', { count: scanPages.length })}</span>
+              <span>
+                {t('common.destination')}: {scanDestinationLabel}
+              </span>
               </div>
               <div className="scanner-preview-modal__actions">
-                <button type="button" className="ghost" onClick={handleClosePreview} disabled={isSavingScan}>
-                  Close preview
+              <button type="button" className="ghost" onClick={handleClosePreview} disabled={isSavingScan}>
+                {t('scanner.closePreview')}
                 </button>
                 <button
                   type="button"
@@ -1239,7 +1339,7 @@ export default function App(): JSX.Element {
                   onClick={() => handleAppendScanPages()}
                   disabled={isAppendingScan || isSavingScan}
                 >
-                  {isAppendingScan ? 'Scanning…' : 'Scan more pages'}
+                {isAppendingScan ? t('scanner.scanning') : t('common.scanMorePages')}
                 </button>
                 <button
                   type="button"
@@ -1247,7 +1347,7 @@ export default function App(): JSX.Element {
                   onClick={() => handleSaveScanSession()}
                   disabled={isSavingScan || scanPages.length === 0}
                 >
-                  {isSavingScan ? 'Saving…' : 'Save as PDF'}
+                {isSavingScan ? t('scanner.saveStatus') : t('common.saveAsPdf')}
                 </button>
               </div>
             </footer>

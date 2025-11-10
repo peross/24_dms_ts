@@ -1,6 +1,6 @@
 import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
-import { promises as fs } from 'node:fs';
+import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { dialog } from 'electron';
@@ -66,6 +66,13 @@ const SCAN_OUTPUT_SUBDIRECTORY = 'Scans';
 const SCAN_TEMP_SUBDIRECTORY = '.scan-temp';
 
 const sessions = new Map<string, ScanSession>();
+
+class NoMorePagesError extends Error {
+  constructor(message?: string) {
+    super(message ?? 'No more pages available.');
+    this.name = 'NoMorePagesError';
+  }
+}
 
 export async function listScanners(): Promise<ScannerDevice[]> {
   try {
@@ -421,7 +428,17 @@ $image = $item.Transfer($format)
 $image.SaveFile($outputPath)
 `.trim();
 
-  await execFileAsync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script]);
+  try {
+    await execFileAsync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script]);
+  } catch (error: any) {
+    const stderr: string = error?.stderr ?? '';
+    const stdout: string = error?.stdout ?? '';
+    const combined = `${stderr}\n${stdout}`.toLowerCase();
+    if (combined.includes('no documents left in the document feeder')) {
+      throw new NoMorePagesError('No documents left in the document feeder.');
+    }
+    throw error;
+  }
 }
 
 async function promptForNextPage(): Promise<boolean> {
@@ -477,7 +494,18 @@ async function capturePagesWithWia(session: ScanSession, allowMultiple: boolean)
     const pageNumber = session.pages.length + newPages.length + 1;
     const fileName = `${session.baseFileName}-page-${String(pageNumber).padStart(2, '0')}.png`;
     const outputPath = path.join(session.tempDir, fileName);
-    await runWiaScan(session.scannerId, outputPath);
+    try {
+      await runWiaScan(session.scannerId, outputPath);
+    } catch (error) {
+      if (error instanceof NoMorePagesError) {
+        break;
+      }
+      throw error;
+    }
+
+    if (!existsSync(outputPath)) {
+      break;
+    }
 
     newPages.push({
       id: randomUUID(),
