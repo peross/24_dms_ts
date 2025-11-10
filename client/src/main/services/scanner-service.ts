@@ -5,6 +5,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { dialog } from 'electron';
 import { PDFDocument, degrees } from 'pdf-lib';
+import sharp from 'sharp';
 
 const execFileAsync = promisify(execFile);
 
@@ -459,6 +460,7 @@ async function captureSinglePage(scannerId: string, outputDirectory: string, bas
 
   if (process.platform === 'win32') {
     await runWiaScan(scannerId, outputPath);
+    await normalizeImageToPng(outputPath);
     return outputPath;
   }
 
@@ -469,6 +471,7 @@ async function captureSinglePage(scannerId: string, outputDirectory: string, bas
       '--format=png',
       `--output-file=${outputPath}`,
     ]);
+    await normalizeImageToPng(outputPath);
     return outputPath;
   }
 
@@ -507,6 +510,13 @@ async function capturePagesWithWia(session: ScanSession, allowMultiple: boolean)
       break;
     }
 
+    try {
+      await normalizeImageToPng(outputPath);
+    } catch (error) {
+      console.warn(`Skipping scanned page ${fileName}: failed to normalize image.`, error);
+      continue;
+    }
+
     newPages.push({
       id: randomUUID(),
       fileName,
@@ -541,6 +551,13 @@ async function capturePagesWithSane(session: ScanSession, allowMultiple: boolean
       '--format=png',
       `--output-file=${outputPath}`,
     ]);
+
+    try {
+      await normalizeImageToPng(outputPath);
+    } catch (error) {
+      console.warn(`Skipping scanned page ${fileName}: failed to normalize image.`, error);
+      continue;
+    }
 
     newPages.push({
       id: randomUUID(),
@@ -676,4 +693,14 @@ function detectImageFormat(buffer: Buffer, fileName: string): 'png' | 'jpeg' | '
   }
   console.warn(`Unknown image signature for scanned page ${fileName}`);
   return 'unknown';
+}
+
+async function normalizeImageToPng(filePath: string): Promise<void> {
+  const buffer = await fs.readFile(filePath);
+  if (buffer.length < 10) {
+    throw new Error('Image buffer is empty.');
+  }
+
+  const pngBuffer = await sharp(buffer).png().toBuffer();
+  await fs.writeFile(filePath, pngBuffer);
 }
