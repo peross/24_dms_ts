@@ -5,7 +5,6 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { dialog } from 'electron';
 import { PDFDocument, degrees } from 'pdf-lib';
-import sharp from 'sharp';
 
 const execFileAsync = promisify(execFile);
 
@@ -67,6 +66,12 @@ const SCAN_OUTPUT_SUBDIRECTORY = 'Scans';
 const SCAN_TEMP_SUBDIRECTORY = '.scan-temp';
 
 const sessions = new Map<string, ScanSession>();
+
+const WIA_OUTPUT_FORMATS = [
+  { id: '{B96B3CAF-0728-11D3-9D7B-0000F81EF32E}', extension: '.png' }, // PNG
+  { id: '{B96B3CAE-0728-11D3-9D7B-0000F81EF32E}', extension: '.jpg' }, // JPEG
+  { id: '{B96B3CAB-0728-11D3-9D7B-0000F81EF32E}', extension: '.bmp' }, // BMP
+];
 
 class NoMorePagesError extends Error {
   constructor(message?: string) {
@@ -409,9 +414,10 @@ function dedupeLinuxDevices(devices: ScannerDevice[]): ScannerDevice[] {
   return Array.from(bySignature.values()).map((entry) => entry.device);
 }
 
-async function runWiaScan(scannerId: string, outputPath: string): Promise<void> {
+async function runWiaScan(scannerId: string, outputPath: string, formatId: string): Promise<void> {
   const safeScannerId = scannerId.replace(/'/g, "''");
   const safeOutputPath = outputPath.replace(/'/g, "''");
+  const safeFormatId = formatId.replace(/'/g, "''");
   const script = `
 $ErrorActionPreference = 'Stop'
 $deviceId = '${safeScannerId}'
@@ -424,7 +430,7 @@ if (-not $deviceInfo) {
 }
 $device = $deviceInfo.Connect()
 $item = $device.Items[1]
-$format = '{B96B3CAF-0728-11D3-9D7B-0000F81EF32E}' # WIA_FORMAT_PNG
+$format = '${safeFormatId}'
 $image = $item.Transfer($format)
 $image.SaveFile($outputPath)
 `.trim();
@@ -442,6 +448,28 @@ $image.SaveFile($outputPath)
   }
 }
 
+async function scanWithWiaFormats(scannerId: string, basePath: string): Promise<string | null> {
+  for (const format of WIA_OUTPUT_FORMATS) {
+    const targetPath = `${basePath}${format.extension}`;
+    try {
+      await runWiaScan(scannerId, targetPath, format.id);
+      return targetPath;
+    } catch (error) {
+      if (error instanceof NoMorePagesError) {
+        throw error;
+      }
+      try {
+        if (existsSync(targetPath)) {
+          await fs.unlink(targetPath);
+        }
+      } catch {
+        // ignore cleanup errors
+      }
+    }
+  }
+  return null;
+}
+
 async function promptForNextPage(): Promise<boolean> {
   const result = await dialog.showMessageBox({
     type: 'question',
@@ -456,22 +484,23 @@ async function promptForNextPage(): Promise<boolean> {
 }
 
 async function captureSinglePage(scannerId: string, outputDirectory: string, baseFileName: string): Promise<string> {
-  const outputPath = path.join(outputDirectory, `${baseFileName}.png`);
-
   if (process.platform === 'win32') {
-    await runWiaScan(scannerId, outputPath);
-    await normalizeImageToPng(outputPath);
-    return outputPath;
+    const basePath = path.join(outputDirectory, baseFileName);
+    const pathResult = await scanWithWiaFormats(scannerId, basePath);
+    if (!pathResult) {
+      throw new Error('Scanner did not produce a page.');
+    }
+    return pathResult;
   }
 
   if (process.platform === 'linux') {
+    const outputPath = path.join(outputDirectory, `${baseFileName}.png`);
     await execFileAsync('scanimage', [
       '--device-name',
       scannerId,
       '--format=png',
       `--output-file=${outputPath}`,
     ]);
-    await normalizeImageToPng(outputPath);
     return outputPath;
   }
 
@@ -495,10 +524,10 @@ async function capturePagesWithWia(session: ScanSession, allowMultiple: boolean)
 
   while (true) {
     const pageNumber = session.pages.length + newPages.length + 1;
-    const fileName = `${session.baseFileName}-page-${String(pageNumber).padStart(2, '0')}.png`;
-    const outputPath = path.join(session.tempDir, fileName);
+    const basePath = path.join(session.tempDir, `${session.baseFileName}-page-${String(pageNumber).padStart(2, '0')}`);
+    let outputPath: string | null = null;
     try {
-      await runWiaScan(session.scannerId, outputPath);
+      outputPath = await scanWithWiaFormats(session.scannerId, basePath);
     } catch (error) {
       if (error instanceof NoMorePagesError) {
         break;
@@ -506,20 +535,13 @@ async function capturePagesWithWia(session: ScanSession, allowMultiple: boolean)
       throw error;
     }
 
-    if (!existsSync(outputPath)) {
+    if (!outputPath || !existsSync(outputPath)) {
       break;
-    }
-
-    try {
-      await normalizeImageToPng(outputPath);
-    } catch (error) {
-      console.warn(`Skipping scanned page ${fileName}: failed to normalize image.`, error);
-      continue;
     }
 
     newPages.push({
       id: randomUUID(),
-      fileName,
+      fileName: path.basename(outputPath),
       absolutePath: outputPath,
       createdAt: new Date(),
     });
@@ -551,13 +573,6 @@ async function capturePagesWithSane(session: ScanSession, allowMultiple: boolean
       '--format=png',
       `--output-file=${outputPath}`,
     ]);
-
-    try {
-      await normalizeImageToPng(outputPath);
-    } catch (error) {
-      console.warn(`Skipping scanned page ${fileName}: failed to normalize image.`, error);
-      continue;
-    }
 
     newPages.push({
       id: randomUUID(),
@@ -602,8 +617,8 @@ async function createPdfFromImages(pages: SessionPage[], targetPath: string, rot
       } else if (format === 'jpeg' || extension === '.jpg' || extension === '.jpeg') {
         image = await pdfDoc.embedJpg(file);
       } else {
-        const pngBuffer = await convertBufferToPng(file);
-        image = await pdfDoc.embedPng(pngBuffer);
+        console.warn(`Skipping scanned page ${page.fileName}: unsupported image format.`);
+        continue;
       }
     } catch (error) {
       console.error(`Failed to embed image ${page.fileName}.`, error);
@@ -679,19 +694,4 @@ function detectImageFormat(buffer: Buffer, fileName: string): 'png' | 'jpeg' | '
   }
   console.warn(`Unknown image signature for scanned page ${fileName}`);
   return 'unknown';
-}
-
-async function convertBufferToPng(buffer: Buffer): Promise<Buffer> {
-  const sharpModule = await import('sharp');
-  return sharpModule.default(buffer).png().toBuffer();
-}
-
-async function normalizeImageToPng(filePath: string): Promise<void> {
-  const buffer = await fs.readFile(filePath);
-  if (buffer.length < 10) {
-    throw new Error('Image buffer is empty.');
-  }
-
-  const pngBuffer = await sharp(buffer).png().toBuffer();
-  await fs.writeFile(filePath, pngBuffer);
 }
