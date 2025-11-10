@@ -571,11 +571,41 @@ async function createPdfFromImages(pages: SessionPage[], targetPath: string, rot
 
   for (const page of pages) {
     const file = await fs.readFile(page.absolutePath);
+    if (file.length < 10) {
+      console.warn(`Skipping scanned page ${page.fileName}: file is empty or corrupted.`);
+      continue;
+    }
+
+    const format = detectImageFormat(file, page.fileName);
+    if (format === 'unknown') {
+      console.warn(`Skipping scanned page ${page.fileName}: unsupported image format.`);
+      continue;
+    }
+
     const extension = path.extname(page.fileName).toLowerCase();
-    const image =
-      extension === '.jpg' || extension === '.jpeg'
-        ? await pdfDoc.embedJpg(file)
-        : await pdfDoc.embedPng(file);
+    let image;
+    try {
+      if (format === 'jpeg' || extension === '.jpg' || extension === '.jpeg') {
+        image = await pdfDoc.embedJpg(file);
+      } else {
+        image = await pdfDoc.embedPng(file);
+      }
+    } catch (error) {
+      if (format === 'png') {
+        console.warn(`Failed to embed PNG for ${page.fileName}.`, error);
+      }
+      if (format !== 'jpeg') {
+        try {
+          image = await pdfDoc.embedJpg(file);
+        } catch (jpegError) {
+          console.error(`Failed to embed image ${page.fileName} as PNG and JPEG.`, jpegError);
+          continue;
+        }
+      } else {
+        console.error(`Failed to embed JPEG image ${page.fileName}.`, error);
+        continue;
+      }
+    }
 
     const userRotation = normalizeRotation(rotations[page.id] ?? 0);
     const pdfRotation = normalizeRotation(360 - userRotation);
@@ -635,4 +665,15 @@ async function cleanupSession(sessionId: string, session?: ScanSession): Promise
   }
 
   sessions.delete(targetSession.id);
+}
+
+function detectImageFormat(buffer: Buffer, fileName: string): 'png' | 'jpeg' | 'unknown' {
+  if (buffer.length >= 8 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+    return 'png';
+  }
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return 'jpeg';
+  }
+  console.warn(`Unknown image signature for scanned page ${fileName}`);
+  return 'unknown';
 }
