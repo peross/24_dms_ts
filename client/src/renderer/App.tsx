@@ -198,7 +198,17 @@ export default function App(): JSX.Element {
 
     try {
       const result = await globalThis.dmsClient.listFiles();
-      setFiles(result);
+      setFiles((previous) => {
+        if (!Array.isArray(result)) {
+          console.warn('Unexpected listFiles result; keeping previous file list.');
+          return previous;
+        }
+        if (result.length === 0 && previous.length > 0) {
+          console.warn('listFiles returned empty; keeping previous file list to avoid clearing workspace view.');
+          return previous;
+        }
+        return result;
+      });
     } catch (error) {
       console.error('Failed to load file list', error);
     }
@@ -637,7 +647,9 @@ export default function App(): JSX.Element {
 
       setScanStatusMessage(result.filePath ? t('scanner.savedTo', { path: result.filePath }) : t('scanner.saveStatus'));
       resetScanSessionState();
-      void loadFiles();
+      if (config.syncActive) {
+        void loadFiles();
+      }
     } catch (error) {
       console.error('Failed to save scan session', error);
       const message = (error as { message?: string } | null)?.message ?? t('scanner.saveStatus');
@@ -646,7 +658,7 @@ export default function App(): JSX.Element {
     } finally {
       setIsSavingScan(false);
     }
-  }, [scanSessionId, scanSaveDirectory, scanFileName, scanPages, resetScanSessionState, loadFiles]);
+  }, [scanSessionId, scanSaveDirectory, scanFileName, scanPages, resetScanSessionState, loadFiles, config.syncActive, t]);
 
   const handleDiscardScanSession = useCallback(() => {
     if (!scanSessionId) {
