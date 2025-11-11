@@ -1,6 +1,6 @@
 import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
-import { promises as fs, existsSync } from 'node:fs';
+import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { dialog } from 'electron';
@@ -415,14 +415,12 @@ function dedupeLinuxDevices(devices: ScannerDevice[]): ScannerDevice[] {
   return Array.from(bySignature.values()).map((entry) => entry.device);
 }
 
-async function runWiaScan(scannerId: string, outputPath: string, formatId: string): Promise<void> {
+async function runWiaScan(scannerId: string, formatId: string): Promise<Buffer> {
   const safeScannerId = scannerId.replace(/'/g, "''");
-  const safeOutputPath = outputPath.replace(/'/g, "''");
   const safeFormatId = formatId.replace(/'/g, "''");
   const script = `
 $ErrorActionPreference = 'Stop'
 $deviceId = '${safeScannerId}'
-$outputPath = '${safeOutputPath}'
 $manager = New-Object -ComObject 'WIA.DeviceManager'
 $deviceInfo = $manager.DeviceInfos | Where-Object { $_.DeviceID -eq $deviceId }
 if (-not $deviceInfo) {
@@ -433,11 +431,20 @@ $device = $deviceInfo.Connect()
 $item = $device.Items[1]
 $format = '${safeFormatId}'
 $image = $item.Transfer($format)
-$image.SaveFile($outputPath)
+[Console]::Out.Write([System.Convert]::ToBase64String([System.Byte[]]$image.FileData.BinaryData))
 `.trim();
 
   try {
-    await execFileAsync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script]);
+    const { stdout } = await execFileAsync(
+      'powershell.exe',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
+      { maxBuffer: 50 * 1024 * 1024 },
+    );
+    const base64 = stdout.replace(/[\r\n]+/g, '').trim();
+    if (!base64) {
+      throw new Error('Scanner returned empty data.');
+    }
+    return Buffer.from(base64, 'base64');
   } catch (error: any) {
     const stderr: string = error?.stderr ?? '';
     const stdout: string = error?.stdout ?? '';
@@ -451,45 +458,29 @@ $image.SaveFile($outputPath)
 
 async function scanWithWiaFormats(scannerId: string, basePath: string): Promise<string | null> {
   for (const format of WIA_OUTPUT_FORMATS) {
-    const targetPath = `${basePath}${format.extension}`;
     try {
-      await runWiaScan(scannerId, targetPath, format.id);
-      const fileReady = await waitForFile(targetPath);
-      if (!fileReady) {
-        await safeUnlink(targetPath);
+      const buffer = await runWiaScan(scannerId, format.id);
+      const detectedFormat = detectImageFormat(buffer, `${basePath}${format.extension}`);
+      let outputBuffer = buffer;
+      let extension = format.extension;
+      if (detectedFormat === 'bmp') {
+        outputBuffer = convertBmpBufferToPng(buffer);
+        extension = '.png';
+      } else if (detectedFormat === 'png') {
+        extension = '.png';
+      } else if (detectedFormat === 'jpeg') {
+        extension = '.jpg';
+      } else {
         continue;
       }
-      const buffer = await fs.readFile(targetPath);
-      const detectedFormat = detectImageFormat(buffer, path.basename(targetPath));
-
-      if (detectedFormat === 'bmp') {
-        const pngBuffer = convertBmpBufferToPng(buffer);
-        const pngPath = `${basePath}.png`;
-        await fs.writeFile(pngPath, pngBuffer);
-        await fs.unlink(targetPath);
-        return pngPath;
-      }
-
-      if (detectedFormat === 'png') {
-        const ensured = await ensureExtension(targetPath, basePath, '.png');
-        return ensured;
-      }
-
-      if (detectedFormat === 'jpeg') {
-        const ensured = await ensureExtension(targetPath, basePath, '.jpg');
-        return ensured;
-      }
-
-      await safeUnlink(targetPath);
+      const targetPath = `${basePath}${extension}`;
+      await fs.writeFile(targetPath, outputBuffer);
+      return targetPath;
     } catch (error) {
       if (error instanceof NoMorePagesError) {
         throw error;
       }
-      try {
-        await safeUnlink(targetPath);
-      } catch {
-        // ignore cleanup errors
-      }
+      // try next format
     }
   }
   return null;
@@ -514,10 +505,6 @@ async function captureSinglePage(scannerId: string, outputDirectory: string, bas
     const pathResult = await scanWithWiaFormats(scannerId, basePath);
     if (!pathResult) {
       throw new Error('Scanner did not produce a page.');
-    }
-    const ready = await waitForFile(pathResult);
-    if (!ready) {
-      throw new Error('Scanned file was not produced.');
     }
     return pathResult;
   }
@@ -802,56 +789,6 @@ function convertBmpBufferToPng(buffer: Buffer): Buffer {
   return PNG.sync.write(png);
 }
 
-async function ensureExtension(currentPath: string, basePath: string, extension: string): Promise<string> {
-  const desiredPath = `${basePath}${extension}`;
-  if (path.resolve(currentPath) === path.resolve(desiredPath)) {
-    return currentPath;
-  }
-  try {
-    await fs.rename(currentPath, desiredPath);
-  } catch (error: any) {
-    if (error?.code === 'EXDEV' || error?.code === 'EEXIST') {
-      await safeUnlink(desiredPath);
-      await fs.copyFile(currentPath, desiredPath);
-      await safeUnlink(currentPath);
-    } else {
-      throw error;
-    }
-  }
-  return desiredPath;
-}
-
-async function waitForFile(filePath: string, options: { timeoutMs?: number; minBytes?: number } = {}): Promise<boolean> {
-  const timeoutMs = options.timeoutMs ?? 5000;
-  const minBytes = options.minBytes ?? 1;
-  const start = Date.now();
-
-  while (Date.now() - start <= timeoutMs) {
-    try {
-      const stat = await fs.stat(filePath);
-      if (stat.isFile() && stat.size >= minBytes) {
-        return true;
-      }
-    } catch {
-      // ignore errors until timeout
-    }
-
-    await delay(100);
-  }
-
-  return false;
-}
-
-async function safeUnlink(filePath: string): Promise<void> {
-  try {
-    if (await fileExists(filePath)) {
-      await fs.unlink(filePath);
-    }
-  } catch {
-    // ignore
-  }
-}
-
 async function fileExists(filePath: string): Promise<boolean> {
   try {
     await fs.access(filePath);
@@ -859,8 +796,4 @@ async function fileExists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-async function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
