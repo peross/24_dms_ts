@@ -742,24 +742,53 @@ function convertBmpBufferToPng(buffer: Buffer): Buffer {
   const planes = buffer.readUInt16LE(26);
   const bitsPerPixel = buffer.readUInt16LE(28);
 
-  if (planes !== 1 || (bitsPerPixel !== 24 && bitsPerPixel !== 32)) {
+  if (planes !== 1 || ![8, 24, 32].includes(bitsPerPixel)) {
     throw new Error(`Unsupported BMP format: ${bitsPerPixel} bits per pixel.`);
+  }
+
+  const paletteOffset = 14 + dibHeaderSize;
+  let palette: Array<{ r: number; g: number; b: number }> | null = null;
+
+  if (bitsPerPixel === 8) {
+    const paletteEntriesRaw = buffer.readUInt32LE(46) || 256;
+    const paletteEntries = Math.min(256, Math.max(1, paletteEntriesRaw));
+    palette = [];
+    for (let i = 0; i < paletteEntries; i++) {
+      const entryOffset = paletteOffset + i * 4;
+      if (entryOffset + 3 >= buffer.length || entryOffset >= pixelOffset) {
+        break;
+      }
+      palette.push({
+        b: buffer[entryOffset] ?? 0,
+        g: buffer[entryOffset + 1] ?? 0,
+        r: buffer[entryOffset + 2] ?? 0,
+      });
+    }
   }
 
   const rowSize = Math.floor((bitsPerPixel * width + 31) / 32) * 4;
   const png = new PNG({ width, height });
 
-  const bytesPerPixel = bitsPerPixel / 8;
   for (let y = 0; y < height; y++) {
     const srcRow = rawHeight > 0 ? height - 1 - y : y;
     const srcOffset = pixelOffset + srcRow * rowSize;
     for (let x = 0; x < width; x++) {
-      const srcIndex = srcOffset + x * bytesPerPixel;
       const dstIndex = (y * width + x) * 4;
-      png.data[dstIndex] = buffer[srcIndex + 2] ?? 0;
-      png.data[dstIndex + 1] = buffer[srcIndex + 1] ?? 0;
-      png.data[dstIndex + 2] = buffer[srcIndex] ?? 0;
-      png.data[dstIndex + 3] = bytesPerPixel === 4 ? buffer[srcIndex + 3] ?? 255 : 255;
+      if (bitsPerPixel === 8 && palette) {
+        const index = buffer[srcOffset + x] ?? 0;
+        const paletteEntry = palette[index] ?? { r: 0, g: 0, b: 0 };
+        png.data[dstIndex] = paletteEntry.r;
+        png.data[dstIndex + 1] = paletteEntry.g;
+        png.data[dstIndex + 2] = paletteEntry.b;
+        png.data[dstIndex + 3] = 255;
+      } else {
+        const bytesPerPixel = bitsPerPixel / 8;
+        const srcIndex = srcOffset + x * bytesPerPixel;
+        png.data[dstIndex] = buffer[srcIndex + 2] ?? 0;
+        png.data[dstIndex + 1] = buffer[srcIndex + 1] ?? 0;
+        png.data[dstIndex + 2] = buffer[srcIndex] ?? 0;
+        png.data[dstIndex + 3] = bytesPerPixel === 4 ? buffer[srcIndex + 3] ?? 255 : 255;
+      }
     }
   }
 
