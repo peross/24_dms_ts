@@ -454,6 +454,11 @@ async function scanWithWiaFormats(scannerId: string, basePath: string): Promise<
     const targetPath = `${basePath}${format.extension}`;
     try {
       await runWiaScan(scannerId, targetPath, format.id);
+      const fileReady = await waitForFile(targetPath);
+      if (!fileReady) {
+        await safeUnlink(targetPath);
+        continue;
+      }
       const buffer = await fs.readFile(targetPath);
       const detectedFormat = detectImageFormat(buffer, path.basename(targetPath));
 
@@ -475,15 +480,13 @@ async function scanWithWiaFormats(scannerId: string, basePath: string): Promise<
         return ensured;
       }
 
-      await fs.unlink(targetPath);
+      await safeUnlink(targetPath);
     } catch (error) {
       if (error instanceof NoMorePagesError) {
         throw error;
       }
       try {
-        if (existsSync(targetPath)) {
-          await fs.unlink(targetPath);
-        }
+        await safeUnlink(targetPath);
       } catch {
         // ignore cleanup errors
       }
@@ -511,6 +514,10 @@ async function captureSinglePage(scannerId: string, outputDirectory: string, bas
     const pathResult = await scanWithWiaFormats(scannerId, basePath);
     if (!pathResult) {
       throw new Error('Scanner did not produce a page.');
+    }
+    const ready = await waitForFile(pathResult);
+    if (!ready) {
+      throw new Error('Scanned file was not produced.');
     }
     return pathResult;
   }
@@ -557,7 +564,7 @@ async function capturePagesWithWia(session: ScanSession, allowMultiple: boolean)
       throw error;
     }
 
-    if (!outputPath || !existsSync(outputPath)) {
+    if (!outputPath || !(await fileExists(outputPath))) {
       break;
     }
 
@@ -800,6 +807,60 @@ async function ensureExtension(currentPath: string, basePath: string, extension:
   if (path.resolve(currentPath) === path.resolve(desiredPath)) {
     return currentPath;
   }
-  await fs.rename(currentPath, desiredPath);
+  try {
+    await fs.rename(currentPath, desiredPath);
+  } catch (error: any) {
+    if (error?.code === 'EXDEV' || error?.code === 'EEXIST') {
+      await safeUnlink(desiredPath);
+      await fs.copyFile(currentPath, desiredPath);
+      await safeUnlink(currentPath);
+    } else {
+      throw error;
+    }
+  }
   return desiredPath;
+}
+
+async function waitForFile(filePath: string, options: { timeoutMs?: number; minBytes?: number } = {}): Promise<boolean> {
+  const timeoutMs = options.timeoutMs ?? 5000;
+  const minBytes = options.minBytes ?? 1;
+  const start = Date.now();
+
+  while (Date.now() - start <= timeoutMs) {
+    try {
+      const stat = await fs.stat(filePath);
+      if (stat.isFile() && stat.size >= minBytes) {
+        return true;
+      }
+    } catch {
+      // ignore errors until timeout
+    }
+
+    await delay(100);
+  }
+
+  return false;
+}
+
+async function safeUnlink(filePath: string): Promise<void> {
+  try {
+    if (await fileExists(filePath)) {
+      await fs.unlink(filePath);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
