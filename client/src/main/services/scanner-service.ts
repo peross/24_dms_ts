@@ -5,6 +5,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { dialog } from 'electron';
 import { PDFDocument, degrees } from 'pdf-lib';
+import { PNG } from 'pngjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -68,9 +69,9 @@ const SCAN_TEMP_SUBDIRECTORY = '.scan-temp';
 const sessions = new Map<string, ScanSession>();
 
 const WIA_OUTPUT_FORMATS = [
-  { id: '{B96B3CAF-0728-11D3-9D7B-0000F81EF32E}', extension: '.png' }, // PNG
-  { id: '{B96B3CAE-0728-11D3-9D7B-0000F81EF32E}', extension: '.jpg' }, // JPEG
-  { id: '{B96B3CAB-0728-11D3-9D7B-0000F81EF32E}', extension: '.bmp' }, // BMP
+  { id: '{B96B3CAF-0728-11D3-9D7B-0000F81EF32E}', extension: '.png', type: 'png' },
+  { id: '{B96B3CAE-0728-11D3-9D7B-0000F81EF32E}', extension: '.jpg', type: 'jpeg' },
+  { id: '{B96B3CAB-0728-11D3-9D7B-0000F81EF32E}', extension: '.bmp', type: 'bmp' },
 ];
 
 class NoMorePagesError extends Error {
@@ -453,7 +454,28 @@ async function scanWithWiaFormats(scannerId: string, basePath: string): Promise<
     const targetPath = `${basePath}${format.extension}`;
     try {
       await runWiaScan(scannerId, targetPath, format.id);
-      return targetPath;
+      const buffer = await fs.readFile(targetPath);
+      const detectedFormat = detectImageFormat(buffer, path.basename(targetPath));
+
+      if (detectedFormat === 'bmp') {
+        const pngBuffer = convertBmpBufferToPng(buffer);
+        const pngPath = `${basePath}.png`;
+        await fs.writeFile(pngPath, pngBuffer);
+        await fs.unlink(targetPath);
+        return pngPath;
+      }
+
+      if (detectedFormat === 'png') {
+        const ensured = await ensureExtension(targetPath, basePath, '.png');
+        return ensured;
+      }
+
+      if (detectedFormat === 'jpeg') {
+        const ensured = await ensureExtension(targetPath, basePath, '.jpg');
+        return ensured;
+      }
+
+      await fs.unlink(targetPath);
     } catch (error) {
       if (error instanceof NoMorePagesError) {
         throw error;
@@ -616,6 +638,9 @@ async function createPdfFromImages(pages: SessionPage[], targetPath: string, rot
         image = await pdfDoc.embedPng(file);
       } else if (format === 'jpeg' || extension === '.jpg' || extension === '.jpeg') {
         image = await pdfDoc.embedJpg(file);
+      } else if (format === 'bmp') {
+        const pngBuffer = convertBmpBufferToPng(file);
+        image = await pdfDoc.embedPng(pngBuffer);
       } else {
         console.warn(`Skipping scanned page ${page.fileName}: unsupported image format.`);
         continue;
@@ -685,13 +710,67 @@ async function cleanupSession(sessionId: string, session?: ScanSession): Promise
   sessions.delete(targetSession.id);
 }
 
-function detectImageFormat(buffer: Buffer, fileName: string): 'png' | 'jpeg' | 'unknown' {
+function detectImageFormat(buffer: Buffer, fileName: string): 'png' | 'jpeg' | 'bmp' | 'unknown' {
   if (buffer.length >= 8 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
     return 'png';
   }
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
     return 'jpeg';
   }
+  if (buffer.length >= 2 && buffer[0] === 0x42 && buffer[1] === 0x4d) {
+    return 'bmp';
+  }
   console.warn(`Unknown image signature for scanned page ${fileName}`);
   return 'unknown';
+}
+
+function convertBmpBufferToPng(buffer: Buffer): Buffer {
+  if (buffer.length < 54 || buffer[0] !== 0x42 || buffer[1] !== 0x4d) {
+    throw new Error('Buffer is not a BMP image.');
+  }
+
+  const pixelOffset = buffer.readUInt32LE(10);
+  const dibHeaderSize = buffer.readUInt32LE(14);
+  if (dibHeaderSize < 40) {
+    throw new Error('Unsupported BMP DIB header.');
+  }
+
+  const rawWidth = buffer.readInt32LE(18);
+  const rawHeight = buffer.readInt32LE(22);
+  const width = Math.abs(rawWidth);
+  const height = Math.abs(rawHeight);
+  const planes = buffer.readUInt16LE(26);
+  const bitsPerPixel = buffer.readUInt16LE(28);
+
+  if (planes !== 1 || (bitsPerPixel !== 24 && bitsPerPixel !== 32)) {
+    throw new Error(`Unsupported BMP format: ${bitsPerPixel} bits per pixel.`);
+  }
+
+  const rowSize = Math.floor((bitsPerPixel * width + 31) / 32) * 4;
+  const png = new PNG({ width, height });
+
+  const bytesPerPixel = bitsPerPixel / 8;
+  for (let y = 0; y < height; y++) {
+    const srcRow = rawHeight > 0 ? height - 1 - y : y;
+    const srcOffset = pixelOffset + srcRow * rowSize;
+    for (let x = 0; x < width; x++) {
+      const srcIndex = srcOffset + x * bytesPerPixel;
+      const dstIndex = (y * width + x) * 4;
+      png.data[dstIndex] = buffer[srcIndex + 2] ?? 0;
+      png.data[dstIndex + 1] = buffer[srcIndex + 1] ?? 0;
+      png.data[dstIndex + 2] = buffer[srcIndex] ?? 0;
+      png.data[dstIndex + 3] = bytesPerPixel === 4 ? buffer[srcIndex + 3] ?? 255 : 255;
+    }
+  }
+
+  return PNG.sync.write(png);
+}
+
+async function ensureExtension(currentPath: string, basePath: string, extension: string): Promise<string> {
+  const desiredPath = `${basePath}${extension}`;
+  if (path.resolve(currentPath) === path.resolve(desiredPath)) {
+    return currentPath;
+  }
+  await fs.rename(currentPath, desiredPath);
+  return desiredPath;
 }
